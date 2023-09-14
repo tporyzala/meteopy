@@ -1,9 +1,9 @@
-from .Hourly.HourlyForcast import *
+from meteopy.Daily.DailyForcast import *
 
-from .Daily.DailyForcast import *
+from meteopy.Hourly.HourlyForcast import *
 
-from .Options.OptionsForecast import *
-from .Options.OptionsElevation import *
-from .Options.OptionsGeocoding import *
+from meteopy.Options.OptionsElevation import *
+from meteopy.Options.OptionsForecast import *
+from meteopy.Options.OptionsGeocoding import *
 
-from .MeteoManager import *
+from meteopy.MeteoManager.MeteoManager import *
