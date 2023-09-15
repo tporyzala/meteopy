@@ -33,14 +33,16 @@ class MeteoManager:
         if self.daily is not None:
             payload['daily'] = ",".join(self.daily.params)
 
-        payload = "&".join("%s=%s" % (i, j) for i, j in payload.items())
-
         return payload
 
-    def get_data(self):
+    def fetch(self):
+        """Fetches data from API
+
+        Returns:
+            json: JSON response
+        """
         payload = self.get_payload()
 
         r = requests.get(self.api_url, payload)
-        print(self.api_url, payload)
 
         return json.loads(r.content.decode('utf-8'))

@@ -6,7 +6,7 @@ api_url = mp.MeteoManager.geocoding
 options_geocoding = mp.OptionsGeocoding('boulder')
 manager_geo = mp.MeteoManager(api_url, options_geocoding)
 
-r1 = manager_geo.get_data()
+r1 = manager_geo.fetch()
 
 r1
 
@@ -33,7 +33,7 @@ daily.precipitation_hours()
 
 manager_forecast = mp.MeteoManager(api_url, options_forecast, hourly, daily)
 
-r2 = manager_forecast.get_data()
+r2 = manager_forecast.fetch()
 
 r2
 
