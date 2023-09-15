@@ -8,8 +8,6 @@ manager_geo = mp.MeteoManager(api_url, options_geocoding)
 
 r1 = manager_geo.fetch()
 
-r1
-
 latitude = r1["results"][0]["latitude"]
 longitude = r1["results"][0]["longitude"]
 elevation = r1["results"][0]["elevation"]
@@ -35,7 +33,6 @@ manager_forecast = mp.MeteoManager(api_url, options_forecast, hourly, daily)
 
 r2 = manager_forecast.fetch()
 
-r2
-
-
+# %%
+r2.keys()
 # %%
