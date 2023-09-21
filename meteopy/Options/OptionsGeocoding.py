@@ -8,3 +8,16 @@ class OptionsGeocoding:
         self.count = count
         self.format = format
         self.language = language
+        return None
+
+    def listify(self, response) -> list:
+        out = []
+        for r in response["results"]:
+            out.append(
+                r["name"]
+                + ", "
+                + r["admin1"]
+                + ", "
+                + r["country_code"]
+            )
+        return out

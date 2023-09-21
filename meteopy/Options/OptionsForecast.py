@@ -3,7 +3,7 @@ from pytz import all_timezones
 
 
 class OptionsForecast:
-    def __init__(self, latitude: float, longitude: float, elevation: float, current_weather=True, temperature_unit=celsius, windspeed_unit=kmh, precipitation_unit=mm, timeformat=iso8601, timezone=denver, past_days=0, forecast_days=7, models=best_match, cell_selection=land) -> None:
+    def __init__(self, latitude: float, longitude: float, current_weather=True, temperature_unit=celsius, windspeed_unit=kmh, precipitation_unit=mm, timeformat=iso8601, timezone=denver, past_days=0, forecast_days=7, models=best_match, cell_selection=land) -> None:
 
         if latitude < -90 or latitude > 90:
             raise ValueError('Latitude must be between -90 and 90 degrees')
@@ -16,7 +16,7 @@ class OptionsForecast:
 
         self.latitude = latitude
         self.longitude = longitude
-        self.elevation = elevation
+        # self.elevation = elevation
         self.current_weather = current_weather
         self.temperature_unit = temperature_unit
         self.windspeed_unit = windspeed_unit
