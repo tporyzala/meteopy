@@ -1,27 +1,35 @@
-# %%
+# %% GEOCODING
 import folium.raster_layers
 import folium.plugins
 import folium
+import json
+
+import pandas as pd
+from pandas import json_normalize
 import meteopy as mp
+import plotly.io as pio
+import numpy as np
+import plotly.figure_factory as ff
 
-
-# %
+# %%
 api_url = mp.MeteoManager.geocoding
 options_geocoding = mp.OptionsGeocoding('boulder', count=20, format='json')
 manager_geo = mp.MeteoManager(api_url, options_geocoding)
 
-r1 = manager_geo.fetch()
+r = manager_geo.fetch()
+r
 
-latitude = r1["results"][0]["latitude"]
-longitude = r1["results"][0]["longitude"]
-elevation = r1["results"][0]["elevation"]
-print("Latitude: {}".format(latitude), "\nLongitude: {}".format(
-    longitude), "\nElevation: {}".format(elevation))
+# %% ELEVATION
+api_url = mp.MeteoManager.elevation
+options_elevation = mp.OptionsElevation(40.0150, 105.2705)
+manager_elevation = mp.MeteoManager(api_url, options_elevation)
 
-tmp = options_geocoding.listify(r1)
-# %
+r = manager_elevation.fetch()
+r
+# %% FORECASTING
+
 api_url = mp.MeteoManager.forecast
-options_forecast = mp.OptionsForecast(latitude, longitude, elevation)
+options_forecast = mp.OptionsForecast(40.0150, 105.2705)
 
 hourly = mp.HourlyForcast()
 hourly.all()
@@ -32,9 +40,12 @@ daily.all()
 
 manager_forecast = mp.MeteoManager(api_url, options_forecast, hourly, daily)
 
-r2 = manager_forecast.fetch()
+r = manager_forecast.fetch()
+hourly = r['hourly']
+daily = r['daily']
 
-# %%
+
+# %% MAPPING
 
 m = folium.Map(location=[40.0255, -105.2751], zoom_start=10)
 folium.LatLngPopup().add_to(m)
@@ -51,3 +62,11 @@ folium.raster_layers.WmsTileLayer(
 m
 
 # %%
+d = {
+    'a': 1,
+    'b': 2,
+    'c': 3,
+}
+
+df = pd.DataFrame(d, index=[0])
+df

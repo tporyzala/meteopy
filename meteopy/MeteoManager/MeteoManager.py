@@ -35,7 +35,7 @@ class MeteoManager:
 
         return payload
 
-    def fetch(self):
+    def fetch(self, out=1):
         """Fetches data from API
 
         Returns:
@@ -45,4 +45,17 @@ class MeteoManager:
 
         r = requests.get(self.api_url, payload)
 
-        return json.loads(r.content.decode('utf-8'))
+        r = json.loads(r.content.decode('utf-8'))
+
+        if 'daily' in r.keys():
+            r['daily'] = pd.DataFrame.from_dict(
+                r['daily'],
+                orient='index',
+            ).T
+        if 'hourly' in r.keys():
+            r['hourly'] = pd.DataFrame.from_dict(
+                r['hourly'],
+                orient='index',
+            ).T
+
+        return r
