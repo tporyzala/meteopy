@@ -17,5 +17,6 @@ json = "json"
 protobuf = "protobuf"
 auto = "auto"
 best_match = "best_match"
+gfs_seamless = 'gfs_seamless'
 nan = "nan"
 utc = "UTC"

@@ -21,14 +21,20 @@ st.set_page_config(layout='wide')
 
 def fetch_forcast(latitude, longitude):
     api_url = mp.MeteoManager.forecast
-    options_forecast = mp.OptionsForecast(latitude, longitude)
-    hourly = mp.HourlyForcast()
-    daily = mp.DailyForcast()
-    hourly.all()
-    daily.all()
-    manager_forecast = mp.MeteoManager(
-        api_url, options_forecast, hourly, daily)
-    r = manager_forecast.fetch()
+    options = mp.OptionsForecast(latitude, longitude)
+    hourly = mp.HourlyForcast().all()
+    daily = mp.DailyForcast().all()
+    manager = mp.MeteoManager(api_url, options, hourly, daily)
+    r = manager.fetch()
+    return r
+
+
+def fetch_ensemble(latitude, longitude):
+    api_url = mp.MeteoManager.ensemble
+    options = mp.OptionsEnsemble(latitude, longitude)
+    hourly = mp.HourlyEnsemble().all()
+    manager = mp.MeteoManager(api_url, options, hourly)
+    r = manager.fetch()
     return r
 
 
@@ -258,3 +264,8 @@ with c2:
 
 # st.write(fig.layout)
 # st.write(df)
+
+# with st.expander('Ensemble', expanded=False):
+#     st.button("Fetch Ensemble", type="primary",key=1):
+#         r = fetch_ensemble(latitude, longitude)
+#         st.write(r)

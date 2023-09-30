@@ -62,11 +62,14 @@ folium.raster_layers.WmsTileLayer(
 m
 
 # %%
-d = {
-    'a': 1,
-    'b': 2,
-    'c': 3,
-}
+latitude = 40.0150
+longitude = 105.2705
 
-df = pd.DataFrame(d, index=[0])
-df
+api_url = mp.MeteoManager.ensemble
+options = mp.OptionsEnsemble(latitude, longitude)
+hourly = mp.HourlyEnsemble().all()
+manager = mp.MeteoManager(api_url, options, hourly)
+r = manager.fetch()
+
+
+r
