@@ -13,12 +13,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.figure_factory as ff
-from math import radians
+from math import radians, isclose
 
 
 st.set_page_config(layout='wide')
 
 
+@st.cache_data
 def fetch_forcast(latitude, longitude):
     api_url = mp.MeteoManager.forecast
     options = mp.OptionsForecast(latitude, longitude)
@@ -26,6 +27,7 @@ def fetch_forcast(latitude, longitude):
     daily = mp.DailyForcast().all()
     manager = mp.MeteoManager(api_url, options, hourly, daily)
     r = manager.fetch()
+    print("fetching...")
     return r
 
 
@@ -82,29 +84,28 @@ folium.raster_layers.WmsTileLayer(
 ).add_to(m)
 folium.LayerControl().add_to(m)
 
-
 # Call to render Folium map in Streamlit
 c1, c2 = st.columns([0.3, 0.7], gap='small')
 with c1:
-    st_data = st_folium(m, use_container_width=True)
+    # Draw map
+    st_data = st_folium(
+        m,
+        use_container_width=True,
+        returned_objects=["last_clicked"],
+    )
     if st_data['last_clicked']:
         latitude = st_data['last_clicked']['lat']
         longitude = st_data['last_clicked']['lng']
-        df = fetch_forcast(latitude, longitude)
-        hourly = df['hourly']
-        daily = df['daily']
-        add_position_to_c(c1, df)
-    else:
-        df = fetch_forcast(latitude, longitude)
-        hourly = df['hourly']
-        daily = df['daily']
-        add_position_to_c(c1, df)
+    df = fetch_forcast(latitude, longitude)
+    hourly = df['hourly']
+    daily = df['daily']
+    add_position_to_c(c1, df)
 with c2:
     fig = make_subplots(
         rows=4,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.02,
+        vertical_spacing=0.0,
         specs=[[{'secondary_y': True}],
                [{'secondary_y': True}],
                [{'secondary_y': True}],
@@ -193,14 +194,31 @@ with c2:
         x=df['current_weather']['time'], row='all', col=1, opacity=0.5, line=dict(color='rgb(100,100,100)')
     )
 
+    for i, row in daily.iterrows():
+        fig.add_vline(
+            x=row["time"], row='all', col=1, opacity=0.05, line=dict(color='rgb(100,100,100)')
+        )
+        if i == 0:
+            ss = row['sunset']
+        else:
+            sr = row['sunrise']
+            fig.add_vrect(
+                x0=ss,
+                x1=sr,
+                fillcolor="rgb(100,100,100)",
+                opacity=0.05,
+                line_width=0,
+            )
+            ss = row['sunset']
+
     layout = {
-        'hovermode': 'x',
+        'hovermode': 'x unified',
+        'hoverlabel': dict(
+            bgcolor='rgba(255,255,255,0.5)',
+        ),
         'legend_tracegroupgap': 90,
         'height': 800,
         'barmode': 'stack',
-        'legend': {
-            'groupclick': 'toggleitem',
-        },
         'xaxis': {
             'anchor': 'y',
             'matches': 'x2',
@@ -256,14 +274,19 @@ with c2:
         'yaxis8': {
             'anchor': 'x4',
             'side': 'right',
-        }
+        },
+        'legend': dict(
+            orientation="h",
+            groupclick='toggleitem',
+        ),
     }
     fig.update_layout(**layout)
 
     st.plotly_chart(fig, use_container_width=True)
 
-# st.write(fig.layout)
+# st.write(daily)
 # st.write(df)
+
 
 # with st.expander('Ensemble', expanded=False):
 #     st.button("Fetch Ensemble", type="primary",key=1):
