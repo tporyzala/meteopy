@@ -5,3 +5,4 @@ numpy
 pydeck
 meteopy
 plotly
+streamlit_extras
