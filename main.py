@@ -60,7 +60,12 @@ def add_position(df):
     st.dataframe(tmp, use_container_width=True, hide_index=True)
 
 
-st.title('Point Weather Forecasting')
+c1, c2 = st.columns([5, 1])
+
+with c1:
+    st.title('Point Weather Forecasting')
+with c2:
+    button(username="tporyzala", floating=False, width=221)
 
 # Initialize map
 tiles = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
@@ -289,9 +294,6 @@ fig.update_layout(**layout)
 
 st.plotly_chart(fig, use_container_width=True)
 
-go.Table(
-
-)
 
 st.dataframe(
     data=daily[[
@@ -311,7 +313,6 @@ st.dataframe(
     hide_index=False,
 )
 
-button(username="tporyzala", floating=False, width=221)
 
 if debug:
     st.write(st_data)
