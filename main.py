@@ -60,7 +60,7 @@ def add_position(df):
     st.dataframe(tmp, use_container_width=True, hide_index=True)
 
 
-c1, c2 = st.columns([5, 1])
+c1, c2 = st.columns([3, 1])
 
 with c1:
     st.title('Point Weather Forecasting')
