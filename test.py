@@ -40,9 +40,9 @@ daily.all()
 
 manager_forecast = mp.MeteoManager(api_url, options_forecast, hourly, daily)
 
-r = manager_forecast.fetch()
-hourly = r['hourly']
-daily = r['daily']
+df = manager_forecast.fetch()
+hourly = df['hourly']
+daily = df['daily']
 
 
 # %% MAPPING

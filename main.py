@@ -60,7 +60,7 @@ def add_position(df):
     st.dataframe(tmp, use_container_width=True, hide_index=True)
 
 
-st.title('Weather Forecasting')
+st.title('Point Weather Forecasting')
 
 # Initialize map
 tiles = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
@@ -291,6 +291,24 @@ st.plotly_chart(fig, use_container_width=True)
 
 go.Table(
 
+)
+
+st.dataframe(
+    data=daily[[
+        'time',
+        'temperature_2m_max',
+        'apparent_temperature_max',
+        'temperature_2m_min',
+        'apparent_temperature_min',
+        'rain_sum',
+        'showers_sum',
+        'snowfall_sum',
+        'windspeed_10m_max',
+        'windgusts_10m_max',
+
+    ]].T,
+    use_container_width=True,
+    hide_index=False,
 )
 
 button(username="tporyzala", floating=False, width=221)
