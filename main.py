@@ -16,8 +16,7 @@ import plotly.figure_factory as ff
 from math import radians, isclose
 from streamlit_extras.buy_me_a_coffee import button
 
-
-st.set_page_config(layout='wide')
+st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 
 debug = False
 
@@ -62,8 +61,8 @@ def add_position(df):
     st.dataframe(tmp, use_container_width=True, hide_index=True)
 
 
+# Title columns
 col1, col2 = st.columns([3, 1])
-
 with col1:
     st.title('Point Weather Forecasting')
 with col2:
@@ -95,6 +94,7 @@ folium.LayerControl().add_to(m)
 folium.GeoJson(
     data='http://www.wpc.ncep.noaa.gov/NationalForecastChart/mapdata/ERODay2.geojson',
 )
+
 # Draw map
 st_data = st_folium(
     m,
@@ -133,24 +133,28 @@ f_fig = make_subplots(
            [{'secondary_y': True}],
            ],
 )
+
 f_fig.add_trace(
     go.Scatter(
         x=df_hourly['time'], y=df_hourly['temperature_2m'], name='Temperature', line=dict(color='firebrick'), opacity=1, legendgroup='1',
     ),
     secondary_y=False, row=1, col=1,
 )
+
 f_fig.add_trace(
     go.Scatter(
         x=df_hourly['time'], y=df_hourly['apparent_temperature'], name='Feels like', line=dict(color='firebrick'), opacity=0.4, legendgroup='1',
     ),
     secondary_y=False, row=1, col=1,
 )
+
 f_fig.add_trace(
     go.Scatter(
         x=df_hourly['time'], y=df_hourly['dewpoint_2m'], name='Dewpoint', line=dict(color='forestgreen'), opacity=0.4, legendgroup='1',
     ),
     secondary_y=False, row=1, col=1,
 )
+
 f_fig.add_hline(
     y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
 )
@@ -161,18 +165,21 @@ f_fig.add_trace(
     ),
     secondary_y=True, row=2, col=1,
 )
+
 f_fig.add_trace(
     go.Scatter(
         x=df_hourly['time'], y=moving_average(df_hourly['cloudcover'], 3), fill='tozeroy', line_color='rgba(0,0,0,0.1)', fillcolor='rgba(0,0,0,0.1)', name='Cloud Cover', legendgroup='2',
     ),
     secondary_y=True, row=2, col=1,
 )
+
 f_fig.add_trace(
     go.Scatter(
         x=df_hourly['time'], y=moving_average(df_hourly['surface_pressure'], 3), name='Pressure', legendgroup='2', line=dict(color='rgba(0,0,0,0.95)')
     ),
     secondary_y=False, row=2, col=1,
 )
+
 f_fig.add_trace(
     go.Scatter(
         x=df_hourly['time'], y=df_hourly['weathercode'], name='WCO', legendgroup='2',
@@ -186,12 +193,14 @@ f_fig.add_trace(
     ),
     secondary_y=False, row=3, col=1,
 )
+
 f_fig.add_trace(
     go.Bar(
         x=df_hourly['time'], y=df_hourly['showers'], name='Shower', legendgroup='3',
     ),
     secondary_y=False, row=3, col=1,
 )
+
 f_fig.add_trace(
     go.Bar(
         x=df_hourly['time'], y=df_hourly['snowfall']*10, name='Snow', legendgroup='3',
@@ -205,12 +214,14 @@ f_fig.add_trace(
     ),
     secondary_y=False, row=4, col=1,
 )
+
 f_fig.add_trace(
     go.Scatter(
         x=df_hourly['time'], y=moving_average(df_hourly['windgusts_10m'], 3), name='Wind Gusts', legendgroup='4',
     ),
     secondary_y=False, row=4, col=1,
 )
+
 f_fig.add_vline(
     x=df['current_weather']['time'], row='all', col=1, opacity=0.5, line=dict(color='rgb(100,100,100)')
 )
@@ -326,7 +337,6 @@ e_fig = make_subplots(
            ],
 )
 
-# apparent temperature
 dat = pd.DataFrame()
 for key in de_hourly.columns.tolist():
     if key.startswith('apparent_temperature_'):
@@ -339,12 +349,10 @@ e_fig.add_trace(
     secondary_y=False, row=1, col=1,
 )
 
-# Freezing line
 e_fig.add_hline(
     y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
 )
 
-# Cloud cover
 dat = pd.DataFrame()
 for key in de_hourly.columns.tolist():
     if key.startswith('cloudcover_'):
@@ -357,7 +365,6 @@ e_fig.add_trace(
     secondary_y=False, row=2, col=1,
 )
 
-# Precipitation
 dat = pd.DataFrame()
 for key in de_hourly.columns.tolist():
     if key.startswith('precipitation_'):
@@ -370,7 +377,6 @@ e_fig.add_trace(
     secondary_y=False, row=3, col=1,
 )
 
-# Windspeed and gusts
 dat = pd.DataFrame()
 for key in de_hourly.columns.tolist():
     if key.startswith('windspeed_10m_'):
@@ -395,7 +401,6 @@ e_fig.add_trace(
     secondary_y=False, row=4, col=1,
 )
 
-# Pressure MSL
 dat = pd.DataFrame()
 for key in de_hourly.columns.tolist():
     if key.startswith('pressure_msl_'):
@@ -525,10 +530,8 @@ layout = {
 e_fig.update_layout(**layout)
 
 tab1, tab2 = st.tabs(["Forecast", "Ensemble"])
-
 with tab1:
     st.plotly_chart(f_fig, use_container_width=True)
-
 with tab2:
     st.plotly_chart(e_fig, use_container_width=True)
 
