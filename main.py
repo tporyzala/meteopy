@@ -34,12 +34,14 @@ def fetch_forcast(latitude, longitude):
     return r
 
 
+# @st.cache_data
 def fetch_ensemble(latitude, longitude):
     api_url = mp.MeteoManager.ensemble
     options = mp.OptionsEnsemble(latitude, longitude)
     hourly = mp.HourlyEnsemble().all()
     manager = mp.MeteoManager(api_url, options, hourly)
     r = manager.fetch()
+    print("fetching...")
     return r
 
 
@@ -60,18 +62,19 @@ def add_position(df):
     st.dataframe(tmp, use_container_width=True, hide_index=True)
 
 
-c1, c2 = st.columns([3, 1])
+col1, col2 = st.columns([3, 1])
 
-with c1:
+with col1:
     st.title('Point Weather Forecasting')
-with c2:
+with col2:
     button(username="tporyzala", floating=False, width=221)
 
 # Initialize map
 tiles = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
 attr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
 m = folium.Map(
-    location=[40.0158, -105.2792],
+    # location=[40.0158, -105.2792], Boulder
+    location=[47.6943, 11.7749],  # Tegernsee
     zoom_start=12,
     tiles=tiles,
     attr=attr,
@@ -89,7 +92,9 @@ folium.raster_layers.WmsTileLayer(
     transparent=True,
 ).add_to(m)
 folium.LayerControl().add_to(m)
-
+folium.GeoJson(
+    data='http://www.wpc.ncep.noaa.gov/NationalForecastChart/mapdata/ERODay2.geojson',
+)
 # Draw map
 st_data = st_folium(
     m,
@@ -97,20 +102,27 @@ st_data = st_folium(
 )
 
 # Latitude and longitude from map
-if st_data['last_clicked']:
-    latitude = st_data['last_clicked']['lat']
-    longitude = st_data['last_clicked']['lng']
-else:
+if st_data['last_clicked'] == None:
     latitude = st_data['center']['lat']
     longitude = st_data['center']['lng']
+else:
+    latitude = st_data['last_clicked']['lat']
+    longitude = st_data['last_clicked']['lng']
 
 # Fetch forecast
 df = fetch_forcast(latitude, longitude)
-hourly = df['hourly']
-daily = df['daily']
+df_hourly = df['hourly']
+df_daily = df['daily']
+
+# Fetch ensemble
+de = fetch_ensemble(latitude, longitude)
+de_hourly = de['hourly']
+
+# Add position table under map
 add_position(df)
 
-fig = make_subplots(
+# Subplots (forecast)
+f_fig = make_subplots(
     rows=4,
     cols=1,
     shared_xaxes=True,
@@ -121,97 +133,97 @@ fig = make_subplots(
            [{'secondary_y': True}],
            ],
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=hourly['temperature_2m'], name='Temperature', line=dict(color='firebrick'), opacity=1, legendgroup='1',
+        x=df_hourly['time'], y=df_hourly['temperature_2m'], name='Temperature', line=dict(color='firebrick'), opacity=1, legendgroup='1',
     ),
     secondary_y=False, row=1, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=hourly['apparent_temperature'], name='Feels like', line=dict(color='firebrick'), opacity=0.4, legendgroup='1',
+        x=df_hourly['time'], y=df_hourly['apparent_temperature'], name='Feels like', line=dict(color='firebrick'), opacity=0.4, legendgroup='1',
     ),
     secondary_y=False, row=1, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=hourly['dewpoint_2m'], name='Dewpoint', line=dict(color='forestgreen'), opacity=0.4, legendgroup='1',
+        x=df_hourly['time'], y=df_hourly['dewpoint_2m'], name='Dewpoint', line=dict(color='forestgreen'), opacity=0.4, legendgroup='1',
     ),
     secondary_y=False, row=1, col=1,
 )
-fig.add_hline(
+f_fig.add_hline(
     y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
 )
 
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=hourly['precipitation_probability'], name='Precip. %', fill='tozeroy', line_color='rgba(165,210,225,0.8)', fillcolor='rgba(165,210,225,0.8)', legendgroup='2',
+        x=df_hourly['time'], y=df_hourly['precipitation_probability'], name='Precip. %', fill='tozeroy', line_color='rgba(165,210,225,0.8)', fillcolor='rgba(165,210,225,0.8)', legendgroup='2',
     ),
     secondary_y=True, row=2, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=moving_average(hourly['cloudcover'], 3), fill='tozeroy', line_color='rgba(0,0,0,0.1)', fillcolor='rgba(0,0,0,0.1)', name='Cloud Cover', legendgroup='2',
+        x=df_hourly['time'], y=moving_average(df_hourly['cloudcover'], 3), fill='tozeroy', line_color='rgba(0,0,0,0.1)', fillcolor='rgba(0,0,0,0.1)', name='Cloud Cover', legendgroup='2',
     ),
     secondary_y=True, row=2, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=moving_average(hourly['surface_pressure'], 3), name='Pressure', legendgroup='2', line=dict(color='rgba(0,0,0,0.95)')
+        x=df_hourly['time'], y=moving_average(df_hourly['surface_pressure'], 3), name='Pressure', legendgroup='2', line=dict(color='rgba(0,0,0,0.95)')
     ),
     secondary_y=False, row=2, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=hourly['weathercode'], name='WCO', legendgroup='2',
+        x=df_hourly['time'], y=df_hourly['weathercode'], name='WCO', legendgroup='2',
     ),
     secondary_y=True, row=2, col=1,
 )
 
-fig.add_trace(
+f_fig.add_trace(
     go.Bar(
-        x=hourly['time'], y=hourly['rain'], name='Rain', legendgroup='3',
+        x=df_hourly['time'], y=df_hourly['rain'], name='Rain', legendgroup='3',
     ),
     secondary_y=False, row=3, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Bar(
-        x=hourly['time'], y=hourly['showers'], name='Shower', legendgroup='3',
+        x=df_hourly['time'], y=df_hourly['showers'], name='Shower', legendgroup='3',
     ),
     secondary_y=False, row=3, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Bar(
-        x=hourly['time'], y=hourly['snowfall']*10, name='Snow', legendgroup='3',
+        x=df_hourly['time'], y=df_hourly['snowfall']*10, name='Snow', legendgroup='3',
     ),
     secondary_y=False, row=3, col=1,
 )
 
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=moving_average(hourly['windspeed_10m'], 3), name='Wind Speed', legendgroup='4',
+        x=df_hourly['time'], y=moving_average(df_hourly['windspeed_10m'], 3), name='Wind Speed', legendgroup='4',
     ),
     secondary_y=False, row=4, col=1,
 )
-fig.add_trace(
+f_fig.add_trace(
     go.Scatter(
-        x=hourly['time'], y=moving_average(hourly['windgusts_10m'], 3), name='Wind Gusts', legendgroup='4',
+        x=df_hourly['time'], y=moving_average(df_hourly['windgusts_10m'], 3), name='Wind Gusts', legendgroup='4',
     ),
     secondary_y=False, row=4, col=1,
 )
-fig.add_vline(
+f_fig.add_vline(
     x=df['current_weather']['time'], row='all', col=1, opacity=0.5, line=dict(color='rgb(100,100,100)')
 )
 
-for i, row in daily.iterrows():
-    fig.add_vline(
+for i, row in df_daily.iterrows():
+    f_fig.add_vline(
         x=row["time"], row='all', col=1, opacity=0.05, line=dict(color='rgb(100,100,100)')
     )
     if i == 0:
         ss = row['sunset']
     else:
         sr = row['sunrise']
-        fig.add_vrect(
+        f_fig.add_vrect(
             x0=ss,
             x1=sr,
             fillcolor="rgb(100,100,100)",
@@ -219,7 +231,6 @@ for i, row in daily.iterrows():
             line_width=0,
         )
         ss = row['sunset']
-
 
 layout = {
     'hovermode': 'x unified',
@@ -249,6 +260,7 @@ layout = {
     'yaxis': {
         'anchor': 'x',
         'ticksuffix': df['hourly_units']['temperature_2m'],
+        'title': 'Temperature',
     },
     'yaxis2': {
         'anchor': 'x',
@@ -260,61 +272,288 @@ layout = {
         'anchor': 'x2',
         'rangemode': 'nonnegative',
         'ticksuffix': df['hourly_units']['surface_pressure'],
+        'title': 'Pressure',
     },
     'yaxis4': {
         'anchor': 'x2',
         'range': [0, 100],
         'side': 'right',
         'ticksuffix': df['hourly_units']['precipitation_probability'],
+        'title': 'Precipitation Probability',
     },
     'yaxis5': {
         'anchor': 'x3',
         'ticksuffix': df['hourly_units']['precipitation'],
         'rangemode': 'nonnegative',
+        'title': 'Precipitation',
     },
     'yaxis6': {
         'anchor': 'x3',
         'side': 'right',
+        'showgrid': False,
+        'showticklabels': False,
     },
     'yaxis7': {
         'anchor': 'x4',
         'ticksuffix': df['hourly_units']['windspeed_10m'],
         'rangemode': 'nonnegative',
+        'title': 'Wind Speed',
     },
     'yaxis8': {
         'anchor': 'x4',
         'side': 'right',
+        'showgrid': False,
+        'showticklabels': False,
     },
     'legend': dict(
         orientation="h",
         groupclick='toggleitem',
     ),
 }
-fig.update_layout(**layout)
+f_fig.update_layout(**layout)
 
-st.plotly_chart(fig, use_container_width=True)
-
-
-st.dataframe(
-    data=daily[[
-        'time',
-        'temperature_2m_max',
-        'apparent_temperature_max',
-        'temperature_2m_min',
-        'apparent_temperature_min',
-        'rain_sum',
-        'showers_sum',
-        'snowfall_sum',
-        'windspeed_10m_max',
-        'windgusts_10m_max',
-
-    ]].T,
-    use_container_width=True,
-    hide_index=False,
+# Subplots (ensemble)
+e_fig = make_subplots(
+    rows=5,
+    cols=1,
+    shared_xaxes=True,
+    vertical_spacing=0.0,
+    specs=[[{'secondary_y': True}],
+           [{'secondary_y': True}],
+           [{'secondary_y': True}],
+           [{'secondary_y': True}],
+           [{'secondary_y': True}],
+           ],
 )
+
+# apparent temperature
+dat = pd.DataFrame()
+for key in de_hourly.columns.tolist():
+    if key.startswith('apparent_temperature_'):
+        tmp = pd.DataFrame({'time': de_hourly['time'], 'dat': de_hourly[key]})
+        dat = pd.concat([dat, tmp], ignore_index=True)
+e_fig.add_trace(
+    go.Box(
+        x=dat['time'], y=dat['dat'],
+    ),
+    secondary_y=False, row=1, col=1,
+)
+
+# Freezing line
+e_fig.add_hline(
+    y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
+)
+
+# Cloud cover
+dat = pd.DataFrame()
+for key in de_hourly.columns.tolist():
+    if key.startswith('cloudcover_'):
+        tmp = pd.DataFrame({'time': de_hourly['time'], 'dat': de_hourly[key]})
+        dat = pd.concat([dat, tmp], ignore_index=True)
+e_fig.add_trace(
+    go.Box(
+        x=dat['time'], y=dat['dat'],
+    ),
+    secondary_y=False, row=2, col=1,
+)
+
+# Precipitation
+dat = pd.DataFrame()
+for key in de_hourly.columns.tolist():
+    if key.startswith('precipitation_'):
+        tmp = pd.DataFrame({'time': de_hourly['time'], 'dat': de_hourly[key]})
+        dat = pd.concat([dat, tmp], ignore_index=True)
+e_fig.add_trace(
+    go.Box(
+        x=dat['time'], y=dat['dat'],
+    ),
+    secondary_y=False, row=3, col=1,
+)
+
+# Windspeed and gusts
+dat = pd.DataFrame()
+for key in de_hourly.columns.tolist():
+    if key.startswith('windspeed_10m_'):
+        tmp = pd.DataFrame({'time': de_hourly['time'], 'dat': de_hourly[key]})
+        dat = pd.concat([dat, tmp], ignore_index=True)
+e_fig.add_trace(
+    go.Box(
+        x=dat['time'], y=dat['dat'],
+    ),
+    secondary_y=False, row=4, col=1,
+)
+
+dat = pd.DataFrame()
+for key in de_hourly.columns.tolist():
+    if key.startswith('windgusts_10m_'):
+        tmp = pd.DataFrame({'time': de_hourly['time'], 'dat': de_hourly[key]})
+        dat = pd.concat([dat, tmp], ignore_index=True)
+e_fig.add_trace(
+    go.Box(
+        x=dat['time'], y=dat['dat'],
+    ),
+    secondary_y=False, row=4, col=1,
+)
+
+# Pressure MSL
+dat = pd.DataFrame()
+for key in de_hourly.columns.tolist():
+    if key.startswith('pressure_msl_'):
+        tmp = pd.DataFrame({'time': de_hourly['time'], 'dat': de_hourly[key]})
+        dat = pd.concat([dat, tmp], ignore_index=True)
+e_fig.add_trace(
+    go.Box(
+        x=dat['time'], y=dat['dat'],
+    ),
+    secondary_y=False, row=5, col=1,
+)
+
+e_fig.add_vline(
+    x=df['current_weather']['time'], row='all', col=1, opacity=0.5, line=dict(color='rgb(100,100,100)')
+)
+
+for i, row in df_daily.iterrows():
+    e_fig.add_vline(
+        x=row["time"], row='all', col=1, opacity=0.05, line=dict(color='rgb(100,100,100)')
+    )
+    if i == 0:
+        ss = row['sunset']
+    else:
+        sr = row['sunrise']
+        e_fig.add_vrect(
+            x0=ss,
+            x1=sr,
+            fillcolor="rgb(100,100,100)",
+            opacity=0.05,
+            line_width=0,
+        )
+        ss = row['sunset']
+
+layout = {
+    'hovermode': 'x unified',
+    'hoverlabel': dict(
+        bgcolor='rgba(255,255,255,0.5)',
+    ),
+    'legend_tracegroupgap': 90,
+    'height': 800,
+    'barmode': 'stack',
+    'xaxis': {
+        'anchor': 'y',
+        'matches': 'x2',
+        'showticklabels': False,
+    },
+    'xaxis2': {
+        'anchor': 'y3',
+        'showticklabels': False,
+    },
+    'xaxis3': {
+        'anchor': 'y5',
+        'showticklabels': False,
+    },
+    'xaxis4': {
+        'anchor': 'y7',
+        'showticklabels': False,
+    },
+    'xaxis5': {
+        'anchor': 'y9',
+        'showticklabels': True,
+    },
+    'yaxis': {
+        'anchor': 'x',
+        'ticksuffix': de['hourly_units']['apparent_temperature'],
+        'title': 'Temperature',
+    },
+    'yaxis2': {
+        'anchor': 'x',
+        'side': 'right',
+        'showgrid': False,
+        'showticklabels': False,
+    },
+    'yaxis3': {
+        'anchor': 'x2',
+        'range': [0, 100],
+        'ticksuffix': de['hourly_units']['cloudcover'],
+        'title': 'Cloud Cover',
+    },
+    'yaxis4': {
+        'anchor': 'x2',
+        'side': 'right',
+        'showgrid': False,
+        'showticklabels': False,
+    },
+    'yaxis5': {
+        'anchor': 'x3',
+        'ticksuffix': de['hourly_units']['precipitation'],
+        'rangemode': 'nonnegative',
+        'title': 'Precipitation',
+    },
+    'yaxis6': {
+        'anchor': 'x3',
+        'side': 'right',
+        'showgrid': False,
+        'showticklabels': False,
+    },
+    'yaxis7': {
+        'anchor': 'x4',
+        'ticksuffix': de['hourly_units']['windspeed_10m'],
+        'rangemode': 'nonnegative',
+        'title': 'Wind Speed',
+    },
+    'yaxis8': {
+        'anchor': 'x4',
+        'side': 'right',
+        'showgrid': False,
+        'showticklabels': False,
+    },
+    'yaxis9': {
+        'anchor': 'x5',
+        'ticksuffix': de['hourly_units']['pressure_msl'],
+        'rangemode': 'nonnegative',
+        'title': 'Pressure',
+    },
+    'yaxis10': {
+        'anchor': 'x5',
+        'side': 'right',
+        'showgrid': False,
+        'showticklabels': False,
+    },
+    'legend': dict(
+        orientation="h",
+        groupclick='toggleitem',
+    ),
+}
+e_fig.update_layout(**layout)
+
+tab1, tab2 = st.tabs(["Forecast", "Ensemble"])
+
+with tab1:
+    st.plotly_chart(f_fig, use_container_width=True)
+
+with tab2:
+    st.plotly_chart(e_fig, use_container_width=True)
+
+# st.dataframe(
+#     data=df_daily[[
+#         'time',
+#         'temperature_2m_max',
+#         'apparent_temperature_max',
+#         'temperature_2m_min',
+#         'apparent_temperature_min',
+#         'rain_sum',
+#         'showers_sum',
+#         'snowfall_sum',
+#         'windspeed_10m_max',
+#         'windgusts_10m_max',
+
+#     ]].T,
+#     use_container_width=True,
+#     hide_index=False,
+# )
 
 
 if debug:
+    st.write('DEBUG')
     st.write(st_data)
-    st.write(daily)
+    st.write(df_daily)
     st.write(df)
+    st.write(de)
