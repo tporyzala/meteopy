@@ -503,10 +503,10 @@ folium.plugins.Geocoder().add_to(m)
 folium.plugins.LocateControl().add_to(m)
 folium.plugins.MousePosition().add_to(m)
 
-col1, col2 = st.columns([3, 1], vertical_alignment='top')
+col1, col2 = st.columns([3, 1], vertical_alignment='top',)
 
 with col1:
-    st_data = st_folium(m, height=400, use_container_width=True)
+    st_data = st_folium(m, use_container_width=True)
 
 with col2:
     if st_data['last_clicked'] is None:
