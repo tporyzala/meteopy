@@ -89,15 +89,15 @@ def make_forecast_plot(df):
         secondary_y=False, row=1, col=1,
     )
 
+    f_fig.add_hline(
+        y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
+    )
+
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=df_hourly['relativehumidity_2m'], name='Humidity', line=dict(color='darkblue'), opacity=0.4, legendgroup='1',
         ),
-        secondary_y=True, row=2, col=1,
-    )
-
-    f_fig.add_hline(
-        y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
+        secondary_y=False, row=2, col=1,
     )
 
     f_fig.add_trace(
