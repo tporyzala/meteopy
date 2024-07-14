@@ -56,11 +56,12 @@ def make_forecast_plot(df):
     df_daily = df['daily']
 
     f_fig = make_subplots(
-        rows=4,
+        rows=5,
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.02,
         specs=[[{'secondary_y': True}],
+               [{'secondary_y': True}],
                [{'secondary_y': True}],
                [{'secondary_y': True}],
                [{'secondary_y': True}],
@@ -88,6 +89,13 @@ def make_forecast_plot(df):
         secondary_y=False, row=1, col=1,
     )
 
+    f_fig.add_trace(
+        go.Scatter(
+            x=df_hourly['time'], y=df_hourly['relativehumidity_2m'], name='Humidity', line=dict(color='darkblue'), opacity=0.4, legendgroup='1',
+        ),
+        secondary_y=True, row=2, col=1,
+    )
+
     f_fig.add_hline(
         y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
     )
@@ -96,63 +104,63 @@ def make_forecast_plot(df):
         go.Scatter(
             x=df_hourly['time'], y=df_hourly['precipitation_probability'], name='Precip. %', fill='tozeroy', line_color='rgba(165,210,225,0.8)', fillcolor='rgba(165,210,225,0.8)', legendgroup='2',
         ),
-        secondary_y=False, row=2, col=1,
+        secondary_y=False, row=3, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=moving_average(df_hourly['cloudcover'], 3), fill='tozeroy', line_color='rgba(0,0,0,0.1)', fillcolor='rgba(0,0,0,0.1)', name='Cloud Cover', legendgroup='2',
         ),
-        secondary_y=False, row=2, col=1,
+        secondary_y=False, row=3, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=moving_average(df_hourly['surface_pressure'], 3), name='Pressure', legendgroup='2', line=dict(color='rgba(0,0,0,0.95)')
         ),
-        secondary_y=True, row=2, col=1,
+        secondary_y=True, row=3, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=df_hourly['weathercode'], name='WCO', legendgroup='2',
         ),
-        secondary_y=False, row=2, col=1,
+        secondary_y=False, row=3, col=1,
     )
 
     f_fig.add_trace(
         go.Bar(
             x=df_hourly['time'], y=df_hourly['rain'], name='Rain', legendgroup='3',
         ),
-        secondary_y=False, row=3, col=1,
+        secondary_y=False, row=4, col=1,
     )
 
     f_fig.add_trace(
         go.Bar(
             x=df_hourly['time'], y=df_hourly['showers'], name='Shower', legendgroup='3',
         ),
-        secondary_y=False, row=3, col=1,
+        secondary_y=False, row=4, col=1,
     )
 
     f_fig.add_trace(
         go.Bar(
             x=df_hourly['time'], y=df_hourly['snowfall']*10, name='Snow', legendgroup='3',
         ),
-        secondary_y=False, row=3, col=1,
+        secondary_y=False, row=4, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=moving_average(df_hourly['windspeed_10m'], 3), name='Wind Speed', legendgroup='4',
         ),
-        secondary_y=False, row=4, col=1,
+        secondary_y=False, row=5, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=moving_average(df_hourly['windgusts_10m'], 3), name='Wind Gusts', legendgroup='4',
         ),
-        secondary_y=False, row=4, col=1,
+        secondary_y=False, row=5, col=1,
     )
 
     f_fig.add_vline(
@@ -199,6 +207,10 @@ def make_forecast_plot(df):
         },
         'xaxis4': {
             'anchor': 'y7',
+            'showticklabels': False,
+        },
+        'xaxis5': {
+            'anchor': 'y9',
             'showticklabels': True,
         },
         'yaxis': {
@@ -209,35 +221,41 @@ def make_forecast_plot(df):
         'yaxis3': {
             'anchor': 'x2',
             'range': [0, 100],
+            'ticksuffix': df['hourly_units']['relativehumidity_2m'],
+            'title': 'Relative Humidy %',
+        },
+        'yaxis5': {
+            'anchor': 'x3',
+            'range': [0, 100],
             'ticksuffix': df['hourly_units']['precipitation_probability'],
             'title': 'Precipitation &</br></br> Cloud Cover %',
         },
-        'yaxis4': {
-            'anchor': 'x2',
+        'yaxis6': {
+            'anchor': 'x3',
             'rangemode': 'nonnegative',
             'ticksuffix': df['hourly_units']['surface_pressure'],
             'title': 'Pressure',
         },
-        'yaxis5': {
-            'anchor': 'x3',
+        'yaxis7': {
+            'anchor': 'x4',
             'ticksuffix': df['hourly_units']['precipitation'],
             'rangemode': 'nonnegative',
             'title': 'Precipitation',
         },
-        'yaxis6': {
-            'anchor': 'x3',
+        'yaxis8': {
+            'anchor': 'x4',
             'side': 'right',
             'showgrid': False,
             'showticklabels': False,
         },
-        'yaxis7': {
-            'anchor': 'x4',
+        'yaxis9': {
+            'anchor': 'x5',
             'ticksuffix': df['hourly_units']['windspeed_10m'],
             'rangemode': 'nonnegative',
             'title': 'Wind Speed',
         },
-        'yaxis8': {
-            'anchor': 'x4',
+        'yaxis10': {
+            'anchor': 'x5',
             'side': 'right',
             'showgrid': False,
             'showticklabels': False,
