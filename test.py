@@ -1,4 +1,5 @@
 # %% GEOCODING
+import requests
 import folium.raster_layers
 import folium.plugins
 import folium
@@ -10,6 +11,7 @@ import meteopy as mp
 import plotly.io as pio
 import numpy as np
 import plotly.figure_factory as ff
+import plotly.express as px
 
 # %%
 api_url = mp.MeteoManager.geocoding
@@ -45,6 +47,24 @@ hourly = df['hourly']
 daily = df['daily']
 
 
+# %% ENSEMBLE
+api_url = mp.MeteoManager.ensemble
+options_ensemble = mp.OptionsEnsemble(40.0150, 105.2705)
+
+hourly = mp.HourlyEnsemble()
+hourly.all()
+
+manager_ensemble = mp.MeteoManager(api_url, options_ensemble, hourly)
+
+de = manager_ensemble.fetch()
+hourly = de['hourly']
+
+# %%
+df = px.data.tips()
+fig = px.box(df, x="time", y="total_bill")
+fig.show()
+
+
 # %% MAPPING
 
 m = folium.Map(location=[40.0255, -105.2751], zoom_start=10)
@@ -73,3 +93,36 @@ r = manager.fetch()
 
 
 r
+
+
+# %%
+
+
+def get_weather_forecast(latitude, longitude):
+    """
+    Fetches weather forecast for a specific location using the Open-Meteo API.
+
+    Parameters:
+    latitude (float): Latitude of the location.
+    longitude (float): Longitude of the location.
+
+    Returns:
+    dict: The weather forecast data.
+    """
+    base_url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        'latitude': latitude,
+        'longitude': longitude,
+        'hourly': 'temperature_2m,precipitation',
+        'daily': 'temperature_2m_max,temperature_2m_min',
+        'timezone': 'auto'
+    }
+
+    response = requests.get(base_url, params=params)
+    response.raise_for_status()  # Raise an error for bad status codes
+    return response.json()
+
+
+# Example usage:
+forecast = get_weather_forecast(37.7749, -122.4194)
+print(forecast)
