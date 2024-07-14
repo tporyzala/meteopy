@@ -21,7 +21,7 @@ st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 debug = False
 
 
-@st.cache_data
+# @st.cache_data
 def fetch_forcast(latitude, longitude):
     api_url = mp.MeteoManager.forecast
     options = mp.OptionsForecast(latitude, longitude)
@@ -33,7 +33,7 @@ def fetch_forcast(latitude, longitude):
     return r
 
 
-@st.cache_data
+# @st.cache_data
 def fetch_ensemble(latitude, longitude):
     api_url = mp.MeteoManager.ensemble
     options = mp.OptionsEnsemble(latitude, longitude)
