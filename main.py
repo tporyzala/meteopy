@@ -83,13 +83,6 @@ def make_forecast_plot(df):
 
     f_fig.add_trace(
         go.Scatter(
-            x=df_hourly['time'], y=df_hourly['dewpoint_2m'], name='Dewpoint', line=dict(color='forestgreen'), opacity=0.4, legendgroup='1',
-        ),
-        secondary_y=False, row=1, col=1,
-    )
-
-    f_fig.add_trace(
-        go.Scatter(
             x=df_hourly['time'], y=df_hourly['relativehumidity_2m'], name='Humidity', line=dict(color='darkblue'), opacity=0.4, legendgroup='1',
         ),
         secondary_y=True, row=1, col=1,
@@ -212,12 +205,6 @@ def make_forecast_plot(df):
             'anchor': 'x',
             'ticksuffix': df['hourly_units']['temperature_2m'],
             'title': 'Temperature',
-        },
-        'yaxis2': {
-            'anchor': 'x',
-            'range': [0, 100],
-            'ticksuffix': df['hourly_units']['relativehumidity_2m'],
-            'title': 'Relative Humidy %',
         },
         'yaxis3': {
             'anchor': 'x2',
