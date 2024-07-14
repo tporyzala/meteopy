@@ -20,9 +20,8 @@ st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 
 debug = False
 
-# @st.cache_data
 
-
+@st.cache_data
 def fetch_forcast(latitude, longitude):
     api_url = mp.MeteoManager.forecast
     options = mp.OptionsForecast(latitude, longitude)
@@ -33,9 +32,8 @@ def fetch_forcast(latitude, longitude):
     print("fetching...")
     return r
 
-# @st.cache_data
 
-
+@st.cache_data
 def fetch_ensemble(latitude, longitude):
     api_url = mp.MeteoManager.ensemble
     options = mp.OptionsEnsemble(latitude, longitude)
@@ -61,7 +59,7 @@ def make_forecast_plot(df):
         rows=4,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.0,
+        vertical_spacing=0.02,
         specs=[[{'secondary_y': True}],
                [{'secondary_y': True}],
                [{'secondary_y': True}],
@@ -90,6 +88,13 @@ def make_forecast_plot(df):
         secondary_y=False, row=1, col=1,
     )
 
+    f_fig.add_trace(
+        go.Scatter(
+            x=df_hourly['time'], y=df_hourly['relativehumidity_2m'], name='Humidity', line=dict(color='darkblue'), opacity=0.4, legendgroup='1',
+        ),
+        secondary_y=True, row=1, col=1,
+    )
+
     f_fig.add_hline(
         y=0, row=1, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
     )
@@ -98,28 +103,28 @@ def make_forecast_plot(df):
         go.Scatter(
             x=df_hourly['time'], y=df_hourly['precipitation_probability'], name='Precip. %', fill='tozeroy', line_color='rgba(165,210,225,0.8)', fillcolor='rgba(165,210,225,0.8)', legendgroup='2',
         ),
-        secondary_y=True, row=2, col=1,
+        secondary_y=False, row=2, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=moving_average(df_hourly['cloudcover'], 3), fill='tozeroy', line_color='rgba(0,0,0,0.1)', fillcolor='rgba(0,0,0,0.1)', name='Cloud Cover', legendgroup='2',
         ),
-        secondary_y=True, row=2, col=1,
+        secondary_y=False, row=2, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=moving_average(df_hourly['surface_pressure'], 3), name='Pressure', legendgroup='2', line=dict(color='rgba(0,0,0,0.95)')
         ),
-        secondary_y=False, row=2, col=1,
+        secondary_y=True, row=2, col=1,
     )
 
     f_fig.add_trace(
         go.Scatter(
             x=df_hourly['time'], y=df_hourly['weathercode'], name='WCO', legendgroup='2',
         ),
-        secondary_y=True, row=2, col=1,
+        secondary_y=False, row=2, col=1,
     )
 
     f_fig.add_trace(
@@ -179,12 +184,12 @@ def make_forecast_plot(df):
             ss = row['sunset']
 
     layout = {
-        'hovermode': 'x unified',
+        'hovermode': False,
         'hoverlabel': dict(
             bgcolor='rgba(255,255,255,0.5)',
         ),
         'legend_tracegroupgap': 90,
-        'height': 800,
+        'height': 1000,
         'barmode': 'stack',
         'xaxis': {
             'anchor': 'y',
@@ -210,22 +215,21 @@ def make_forecast_plot(df):
         },
         'yaxis2': {
             'anchor': 'x',
-            'side': 'right',
-            'showgrid': False,
-            'showticklabels': False,
+            'range': [0, 100],
+            'ticksuffix': df['hourly_units']['relativehumidity_2m'],
+            'title': 'Relative Humidy %',
         },
         'yaxis3': {
+            'anchor': 'x2',
+            'range': [0, 100],
+            'ticksuffix': df['hourly_units']['precipitation_probability'],
+            'title': 'Precipitation &</br></br> Cloud Cover %',
+        },
+        'yaxis4': {
             'anchor': 'x2',
             'rangemode': 'nonnegative',
             'ticksuffix': df['hourly_units']['surface_pressure'],
             'title': 'Pressure',
-        },
-        'yaxis4': {
-            'anchor': 'x2',
-            'range': [0, 100],
-            'side': 'right',
-            'ticksuffix': df['hourly_units']['precipitation_probability'],
-            'title': 'Precipitation Probability',
         },
         'yaxis5': {
             'anchor': 'x3',
@@ -264,14 +268,13 @@ def make_ensemble_plot(de, df):
     # Subplots (ensemble)
 
     de_hourly = de['hourly']
-    df_hourly = df['hourly']
     df_daily = df['daily']
 
     e_fig = make_subplots(
         rows=5,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.0,
+        vertical_spacing=0.02,
         specs=[[{'secondary_y': True}],
                [{'secondary_y': True}],
                [{'secondary_y': True}],
@@ -384,12 +387,12 @@ def make_ensemble_plot(de, df):
             ss = row['sunset']
 
     layout = {
-        'hovermode': 'x unified',
+        'hovermode': False,
         'hoverlabel': dict(
             bgcolor='rgba(255,255,255,0.5)',
         ),
         'legend_tracegroupgap': 90,
-        'height': 800,
+        'height': 1200,
         'barmode': 'stack',
         'xaxis': {
             'anchor': 'y',
@@ -503,22 +506,22 @@ folium.plugins.Geocoder().add_to(m)
 folium.plugins.LocateControl().add_to(m)
 folium.plugins.MousePosition().add_to(m)
 
-col1, col2 = st.columns([3, 1], vertical_alignment='center',)
+st_data = st_folium(m, use_container_width=True)
+
+if st_data['last_clicked'] is None:
+    latitude = st_data['center']['lat']
+    longitude = st_data['center']['lng']
+else:
+    latitude = st_data['last_clicked']['lat']
+    longitude = st_data['last_clicked']['lng']
+
+col1, col2, col3 = st.columns(3, vertical_alignment='center')
 
 with col1:
-    st_data = st_folium(m, use_container_width=True)
-
-with col2:
-    if st_data['last_clicked'] is None:
-        latitude = st_data['center']['lat']
-        longitude = st_data['center']['lng']
-    else:
-        latitude = st_data['last_clicked']['lat']
-        longitude = st_data['last_clicked']['lng']
-
     st.metric(label='Latitude', value=latitude)
+with col2:
     st.metric(label='Longitude', value=longitude)
-
+with col3:
     if st.button(
         label='Fetch Forecast!',
         help='Click to get the forecast at the latitude-longitude above.',
@@ -530,6 +533,8 @@ with col2:
         f_fig = make_forecast_plot(df)
         e_fig = make_ensemble_plot(de, df)
 
+        st.session_state['df'] = df
+        st.session_state['de'] = de
         st.session_state['f_fig'] = f_fig
         st.session_state['e_fig'] = e_fig
 
