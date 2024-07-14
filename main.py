@@ -397,7 +397,7 @@ def make_ensemble_plot(de, df):
             bgcolor='rgba(255,255,255,0.5)',
         ),
         'legend_tracegroupgap': 90,
-        'height': 1200,
+        'height': 1000,
         'barmode': 'stack',
         'xaxis': {
             'anchor': 'y',
@@ -524,8 +524,10 @@ col1, col2, col3 = st.columns(3, vertical_alignment='center')
 
 with col1:
     st.metric(label='Latitude', value=latitude)
+
 with col2:
     st.metric(label='Longitude', value=longitude)
+
 with col3:
     if st.button(
         label='Fetch Forecast!',
