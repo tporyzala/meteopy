@@ -511,7 +511,9 @@ folium.plugins.Geocoder().add_to(m)
 folium.plugins.LocateControl().add_to(m)
 folium.plugins.MousePosition().add_to(m)
 
-st_data = st_folium(m, height=500, use_container_width=True)
+cont1 = st.container(height=400)
+with cont1:
+    st_data = st_folium(m, use_container_width=True)
 
 if st_data['last_clicked'] is None:
     latitude = st_data['center']['lat']
