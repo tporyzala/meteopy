@@ -504,9 +504,10 @@ folium.plugins.LocateControl().add_to(m)
 folium.plugins.MousePosition().add_to(m)
 
 col1, col2 = st.columns([3, 1])
+
 with col1:
-    # Draw map
     st_data = st_folium(m, height=400, use_container_width=True)
+
 with col2:
     if st_data['last_clicked'] is None:
         latitude = st_data['center']['lat']
@@ -514,25 +515,27 @@ with col2:
     else:
         latitude = st_data['last_clicked']['lat']
         longitude = st_data['last_clicked']['lng']
+
     st.metric(label='Latitude', value=latitude)
     st.metric(label='Longitude', value=longitude)
-    get_forecast = st.button(
+
+    if st.button(
         label='Fetch Forecast!',
-        type='primary',
         help='Click to get the forecast at the latitude-longitude above.',
-    )
+        type='primary',
+    ):
+        df = fetch_forcast(latitude, longitude)
+        de = fetch_ensemble(latitude, longitude)
 
-# Fetch forecast
-if get_forecast:
-    df = fetch_forcast(latitude, longitude)
-    f_fig = make_forecast_plot(df)
+        f_fig = make_forecast_plot(df)
+        e_fig = make_ensemble_plot(de, df)
 
-    # Fetch ensemble
-    de = fetch_ensemble(latitude, longitude)
-    e_fig = make_ensemble_plot(de, df)
+        st.session_state['f_fig'] = f_fig
+        st.session_state['e_fig'] = e_fig
 
+if 'f_fig' in st.session_state and 'e_fig' in st.session_state:
     tab1, tab2 = st.tabs(["Forecast", "Ensemble"])
     with tab1:
-        st.plotly_chart(f_fig, use_container_width=True)
+        st.plotly_chart(st.session_state['f_fig'], use_container_width=True)
     with tab2:
-        st.plotly_chart(e_fig, use_container_width=True)
+        st.plotly_chart(st.session_state['e_fig'], use_container_width=True)
