@@ -499,8 +499,8 @@ with col2:
 tiles = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
 attr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
 m = folium.Map(
-    # location=[40.0158, -105.2792], Boulder
-    location=[47.6943, 11.7749],  # Tegernsee
+    # location=[47.6943, 11.7749],  # Tegernsee
+    location=[40.0401, -105.2631],  # Boulder
     zoom_start=12,
     tiles=tiles,
     attr=attr,
