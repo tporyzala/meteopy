@@ -1,7 +1,7 @@
 from ..utils.mytypes import *
 
 
-class DailyForcast:
+class DailyHistorical:
     def __init__(self):
         self.params = TypedList()
         return None

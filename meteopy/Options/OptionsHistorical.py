@@ -2,7 +2,7 @@ from ..utils.constants import *
 from pytz import all_timezones
 
 
-class OptionsForecast:
+class OptionsHistorical:
     def __init__(self, latitude: float, longitude: float, start_date: str, end_date: str, temperature_unit=celsius, windspeed_unit=kmh, precipitation_unit=mm, timeformat=iso8601, timezone=auto, cell_selection=land) -> None:
 
         if latitude < -90 or latitude > 90:

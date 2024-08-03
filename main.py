@@ -44,6 +44,26 @@ def fetch_ensemble(latitude, longitude):
     return r
 
 
+def fetch_airquality(latitude, longitude):
+    api_url = mp.MeteoManager.air_quality
+    options = mp.OptionsAirQuality(latitude, longitude)
+    hourly = mp.HourlyAirQuality().all()
+    manager = mp.MeteoManager(api_url, options, hourly)
+    r = manager.fetch()
+    print("fetching...")
+    return r
+
+
+def fetch_historical(latitude, longitude):
+    api_url = mp.MeteoManager.historical
+    options = mp.OptionsHistorical(latitude, longitude)
+    hourly = mp.HourlyHistorical().all()
+    manager = mp.MeteoManager(api_url, options, hourly)
+    r = manager.fetch()
+    print("fetching...")
+    return r
+
+
 def moving_average(data, window):
     weights = np.repeat(1.0, window) / window
     return np.convolve(data, weights, mode='valid')

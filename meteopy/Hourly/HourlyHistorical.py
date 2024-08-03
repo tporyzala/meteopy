@@ -1,7 +1,7 @@
 from ..utils.mytypes import *
 
 
-class HourlyForcast:
+class HourlyHistorical:
     def __init__(self):
         self.params = TypedList()
 
