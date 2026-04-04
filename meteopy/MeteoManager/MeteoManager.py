@@ -27,6 +27,9 @@ class MeteoManager:
     def get_payload(self) -> str:
         payload = vars(self.options)
 
+        if hasattr(self.options, 'current') and self.options.current is not None:
+            payload['current'] = ",".join(self.options.current)
+
         if self.hourly is not None:
             payload['hourly'] = ",".join(self.hourly.params)
 

@@ -3,7 +3,7 @@ from pytz import all_timezones
 
 
 class OptionsEnsemble:
-    def __init__(self, latitude: float, longitude: float, temperature_unit=celsius, windspeed_unit=kmh, precipitation_unit=mm, timeformat=iso8601, timezone=auto, past_days=2, forecast_days=7, models=gfs_seamless, cell_selection=land) -> None:
+    def __init__(self, latitude: float, longitude: float, temperature_unit=celsius, wind_speed_unit=kmh, precipitation_unit=mm, timeformat=iso8601, timezone=auto, past_days=2, forecast_days=7, models=gfs_seamless, cell_selection=land) -> None:
 
         if latitude < -90 or latitude > 90:
             raise ValueError('Latitude must be between -90 and 90 degrees')
@@ -18,7 +18,7 @@ class OptionsEnsemble:
         self.longitude = longitude
         # self.elevation = elevation
         self.temperature_unit = temperature_unit
-        self.windspeed_unit = windspeed_unit
+        self.wind_speed_unit = wind_speed_unit
         self.precipitation_unit = precipitation_unit
         self.timeformat = timeformat
         self.timezone = timezone

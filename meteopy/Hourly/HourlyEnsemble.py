@@ -12,12 +12,12 @@ class HourlyEnsemble:
 
     @run_all
     def relativehumidity_2m(self):
-        self.params.append("relativehumidity_2m")
+        self.params.append("relative_humidity_2m")
         return self
 
     @run_all
     def dewpoint_2m(self):
-        self.params.append("dewpoint_2m")
+        self.params.append("dew_point_2m")
         return self
 
     @run_all
@@ -37,42 +37,42 @@ class HourlyEnsemble:
 
     @run_all
     def cloudcover(self):
-        self.params.append("cloudcover")
+        self.params.append("cloud_cover")
         return self
 
     @run_all
     def windspeed_10m(self):
-        self.params.append("windspeed_10m")
+        self.params.append("wind_speed_10m")
         return self
 
     @run_all
     def windspeed_80m(self):
-        self.params.append("windspeed_80m")
+        self.params.append("wind_speed_80m")
         return self
 
     @run_all
     def windspeed_120m(self):
-        self.params.append("windspeed_120m")
+        self.params.append("wind_speed_120m")
         return self
 
     @run_all
     def winddirection_10m(self):
-        self.params.append("winddirection_10m")
+        self.params.append("wind_direction_10m")
         return self
 
     @run_all
     def winddirection_80m(self):
-        self.params.append("winddirection_80m")
+        self.params.append("wind_direction_80m")
         return self
 
     @run_all
     def winddirection_120m(self):
-        self.params.append("winddirection_120m")
+        self.params.append("wind_direction_120m")
         return self
 
     @run_all
     def windgusts_10m(self):
-        self.params.append("windgusts_10m")
+        self.params.append("wind_gusts_10m")
         return self
 
     @run_all
