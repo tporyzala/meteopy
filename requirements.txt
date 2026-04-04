@@ -6,3 +6,6 @@ pydeck
 meteopy
 plotly
 streamlit_extras
+requests
+pytz
+streamlit
