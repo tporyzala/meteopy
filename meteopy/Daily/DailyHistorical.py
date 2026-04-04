@@ -92,11 +92,24 @@ class DailyHistorical:
         return self
 
     @run_all
-    def et0_fao_evapotranspiration(self):
-        self.params.append("et0_fao_evapotranspiration")
+    def showers_sum(self):
+        self.params.append("showers_sum")
         return self
 
-    def all(self):
+    @run_all
+    def precipitation_probability_max(self):
+        self.params.append("precipitation_probability_max")
+        return self
+
+    @run_all
+    def uv_index_max(self):
+        self.params.append("uv_index_max")
+        return self
+
+    @run_all
+    def uv_index_clear_sky_max(self):
+        self.params.append("uv_index_clear_sky_max")
+        return self
         for method_name in dir(self):
             attr = getattr(self, method_name)
             if getattr(attr, '_run_all', False):

@@ -20,6 +20,31 @@ st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 
 debug = False
 
+HISTORICAL_VARIABLE_OPTIONS = {
+    'Weather Code': 'weather_code',
+    'Temperature Max': 'temperature_2m_max',
+    'Temperature Min': 'temperature_2m_min',
+    'Apparent Temperature Max': 'apparent_temperature_max',
+    'Apparent Temperature Min': 'apparent_temperature_min',
+    'Sunrise': 'sunrise',
+    'Sunset': 'sunset',
+    'Daylight Duration': 'daylight_duration',
+    'Sunshine Duration': 'sunshine_duration',
+    'UV Index Max': 'uv_index_max',
+    'UV Index Clear Sky Max': 'uv_index_clear_sky_max',
+    'Precipitation Sum': 'precipitation_sum',
+    'Rain Sum': 'rain_sum',
+    'Showers Sum': 'showers_sum',
+    'Snowfall Sum': 'snowfall_sum',
+    'Precipitation Hours': 'precipitation_hours',
+    'Precipitation Probability Max': 'precipitation_probability_max',
+    'Wind Speed Max': 'wind_speed_10m_max',
+    'Wind Gusts Max': 'wind_gusts_10m_max',
+    'Wind Direction Dominant': 'wind_direction_10m_dominant',
+    'Shortwave Radiation Sum': 'shortwave_radiation_sum',
+    'ET0 FAO Evapotranspiration': 'et0_fao_evapotranspiration',
+}
+
 
 # @st.cache_data
 def fetch_forcast(latitude, longitude):
@@ -54,13 +79,25 @@ def fetch_airquality(latitude, longitude):
     return r
 
 
-def fetch_historical(latitude, longitude):
+def fetch_historical(latitude, longitude, variables=None, years=10):
+    today = pd.Timestamp.now('UTC').date()
+    current_year = today.year
+    start_date = f"{current_year - years + 1}-01-01"
+    end_date = today.isoformat()
+
+    if not variables:
+        variables = ['temperature_2m_max']
+
     api_url = mp.MeteoManager.historical
-    options = mp.OptionsHistorical(latitude, longitude)
-    hourly = mp.HourlyHistorical().all()
-    manager = mp.MeteoManager(api_url, options, hourly)
+    options = mp.OptionsHistorical(latitude, longitude, start_date, end_date)
+    daily = mp.DailyHistorical()
+    for variable in variables:
+        if hasattr(daily, variable):
+            getattr(daily, variable)()
+
+    manager = mp.MeteoManager(api_url, options, daily=daily)
     r = manager.fetch()
-    print("fetching...")
+    print("fetching historical...")
     return r
 
 
@@ -548,6 +585,87 @@ def make_ensemble_plot(de, df):
     return e_fig
 
 
+def make_historical_plot(historical, variables, start_month=1):
+    daily = historical['daily'].copy()
+    daily['time'] = pd.to_datetime(daily['time'])
+    daily['season'] = daily['time'].apply(lambda t: t.year if t.month >= start_month else t.year - 1)
+
+    def season_plot_time(t):
+        base = t.replace(year=2000)
+        if t.month < start_month:
+            base = base + pd.DateOffset(years=1)
+        return base
+
+    daily['plot_time'] = daily['time'].apply(season_plot_time)
+
+    now = pd.Timestamp.now('UTC')
+    current_season = now.year if now.month >= start_month else now.year - 1
+    seasons = sorted(daily['season'].unique())
+    row_count = max(1, len(variables))
+
+    h_fig = make_subplots(
+        rows=row_count,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.05,
+    )
+
+    for row, variable in enumerate(variables, start=1):
+        for season in seasons:
+            year_data = daily[daily['season'] == season].sort_values('time')
+            if year_data.empty:
+                continue
+
+            year_data = year_data.copy()
+            if 'sum' in variable:
+                year_data[variable] = year_data[variable].cumsum()
+
+            season_label = f"{season}-{season + 1}" if start_month != 1 else str(season)
+            is_current = season == current_season
+            h_fig.add_trace(
+                go.Scatter(
+                    x=year_data['plot_time'],
+                    y=year_data[variable],
+                    mode='lines',
+                    name=season_label,
+                    line=dict(color='firebrick' if is_current else 'lightgray', width=3 if is_current else 1),
+                    opacity=1.0 if is_current else 0.4,
+                ),
+                row=row,
+                col=1,
+            )
+
+    x_start = pd.Timestamp(f"2000-{start_month:02d}-01")
+    x_end = x_start + pd.DateOffset(years=1) - pd.Timedelta(days=1)
+
+    layout = {
+        'hovermode': 'x',
+        'hoverlabel': dict(bgcolor='rgba(255,255,255,0.5)'),
+        'legend_tracegroupgap': 90,
+        'height': 400 + 250 * row_count,
+        'xaxis': {
+            'title': 'Day of Year',
+            'range': [x_start, x_end],
+            'tickformat': '%b %d',
+            'showgrid': True,
+        },
+        'yaxis': {
+            'title': variables[0].replace('_', ' ').title(),
+            'ticksuffix': historical['daily_units'].get(variables[0], ''),
+        },
+        'legend': dict(orientation='h', groupclick='toggleitem'),
+    }
+
+    for row in range(2, row_count + 1):
+        layout[f'yaxis{row}'] = {
+            'title': variables[row - 1].replace('_', ' ').title(),
+            'ticksuffix': historical['daily_units'].get(variables[row - 1], ''),
+        }
+
+    h_fig.update_layout(**layout)
+    return h_fig
+
+
 # Title columns
 col1, col2 = st.columns([3, 1])
 with col1:
@@ -614,9 +732,58 @@ with col3:
         st.session_state['f_fig'] = f_fig
         st.session_state['e_fig'] = e_fig
 
-if 'f_fig' in st.session_state and 'e_fig' in st.session_state:
-    tab1, tab2 = st.tabs(["Forecast", "Ensemble"])
-    with tab1:
-        st.plotly_chart(st.session_state['f_fig'], width='stretch')
-    with tab2:
-        st.plotly_chart(st.session_state['e_fig'], width='stretch')
+tabs = ['Forecast', 'Ensemble', 'Historical']
+
+if tabs:
+    tab_objs = st.tabs(tabs)
+    for tab_name, tab_obj in zip(tabs, tab_objs):
+        with tab_obj:
+            if tab_name == 'Forecast':
+                if 'f_fig' in st.session_state:
+                    st.plotly_chart(st.session_state['f_fig'], width='stretch')
+                else:
+                    st.info('Forecast is ready after you click Fetch Forecast!')
+            elif tab_name == 'Ensemble':
+                if 'e_fig' in st.session_state:
+                    st.plotly_chart(st.session_state['e_fig'], width='stretch')
+                else:
+                    st.info('Ensemble is ready after you click Fetch Forecast!')
+            elif tab_name == 'Historical':
+                years_back = st.slider('Years back', min_value=1, max_value=50, value=10, step=1)
+
+                start_month = st.slider('Start month', min_value=1, max_value=12, value=1, step=1)
+
+                default_labels = ['Temperature Max']
+                if 'historical_vars' in st.session_state:
+                    default_labels = [label for label, var in HISTORICAL_VARIABLE_OPTIONS.items() if var in st.session_state['historical_vars']]
+
+                selected_labels = st.multiselect(
+                    label='Historical outputs',
+                    options=list(HISTORICAL_VARIABLE_OPTIONS.keys()),
+                    default=default_labels,
+                    key='historical_outputs',
+                )
+
+                selected_vars = [HISTORICAL_VARIABLE_OPTIONS[label] for label in selected_labels]
+
+                if st.button(
+                    label='Fetch Historical Weather',
+                    help='Manual fetch for expensive historical archive data for the current location.',
+                    type='secondary',
+                    key='fetch_historical_button',
+                ):
+                    if not selected_vars:
+                        st.warning('Please select at least one historical output before fetching.')
+                    else:
+                        hist = fetch_historical(latitude, longitude, selected_vars, years_back)
+                        h_fig = make_historical_plot(hist, selected_vars, start_month)
+
+                        st.session_state['historical'] = hist
+                        st.session_state['h_fig'] = h_fig
+                        st.session_state['historical_vars'] = selected_vars
+
+                if 'historical' in st.session_state and selected_vars:
+                    st.session_state['h_fig'] = make_historical_plot(st.session_state['historical'], selected_vars, start_month)
+
+                if 'h_fig' in st.session_state:
+                    st.plotly_chart(st.session_state['h_fig'], width='stretch')
