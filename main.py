@@ -272,7 +272,7 @@ def make_forecast_plot(df, aq=None):
             bgcolor='rgba(255,255,255,0.5)',
         ),
         'legend_tracegroupgap': 90,
-        'height': 1000,
+        'height': 1300,
         'barmode': 'stack',
         'xaxis': {
             'anchor': 'y',
@@ -489,7 +489,7 @@ def make_ensemble_plot(de, df):
             bgcolor='rgba(255,255,255,0.5)',
         ),
         'legend_tracegroupgap': 90,
-        'height': 1000,
+        'height': 1300,
         'barmode': 'stack',
         'xaxis': {
             'anchor': 'y',
