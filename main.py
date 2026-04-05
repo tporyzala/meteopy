@@ -101,6 +101,7 @@ def fetch_historical(latitude, longitude, variables=None, years=40):
     return r
 
 
+@st.cache_data
 def fetch_elevation(latitude, longitude):
     api_url = mp.MeteoManager.elevation
     options = mp.OptionsElevation(latitude, longitude)
@@ -724,7 +725,7 @@ with col2:
 
 with col3:
     try:
-        elevation_data = fetch_elevation(latitude, longitude)
+        elevation_data = fetch_elevation(round(latitude, 4), round(longitude, 4))
         elevation = elevation_data.get('elevation', [None])[0] if 'elevation' in elevation_data else None
         if elevation is not None:
             elevation_ft = elevation * 3.28084
