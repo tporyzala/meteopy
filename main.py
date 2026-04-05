@@ -79,7 +79,7 @@ def fetch_airquality(latitude, longitude):
     return r
 
 
-def fetch_historical(latitude, longitude, variables=None, years=10):
+def fetch_historical(latitude, longitude, variables=None, years=40):
     today = pd.Timestamp.now('UTC').date()
     current_year = today.year
     start_date = f"{current_year - years + 1}-01-01"
@@ -98,6 +98,15 @@ def fetch_historical(latitude, longitude, variables=None, years=10):
     manager = mp.MeteoManager(api_url, options, daily=daily)
     r = manager.fetch()
     print("fetching historical...")
+    return r
+
+
+def fetch_elevation(latitude, longitude):
+    api_url = mp.MeteoManager.elevation
+    options = mp.OptionsElevation(latitude, longitude)
+    manager = mp.MeteoManager(api_url, options)
+    r = manager.fetch()
+    print("fetching elevation...")
     return r
 
 
@@ -705,15 +714,27 @@ else:
     latitude = st_data['last_clicked']['lat']
     longitude = st_data['last_clicked']['lng']
 
-col1, col2, col3 = st.columns(3, vertical_alignment='center')
+col1, col2, col3, col4 = st.columns(4, vertical_alignment='center')
 
 with col1:
-    st.metric(label='Latitude', value=latitude)
+    st.metric(label='Latitude', value=f"{latitude:.4f}")
 
 with col2:
-    st.metric(label='Longitude', value=longitude)
+    st.metric(label='Longitude', value=f"{longitude:.4f}")
 
 with col3:
+    try:
+        elevation_data = fetch_elevation(latitude, longitude)
+        elevation = elevation_data.get('elevation', [None])[0] if 'elevation' in elevation_data else None
+        if elevation is not None:
+            elevation_ft = elevation * 3.28084
+            st.metric(label='Elevation', value=f"{elevation:.1f} m / {elevation_ft:.1f} ft")
+    except Exception as e:
+        st.metric(label='Elevation', value='Error')
+        if debug:
+            st.error(f"Elevation fetch error: {e}")
+
+with col4:
     if st.button(
         label='Fetch Forecast!',
         help='Click to get the forecast at the latitude-longitude above.',
