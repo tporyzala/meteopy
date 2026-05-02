@@ -91,9 +91,19 @@ def fetch_historical(latitude, longitude, variables=None, years=40):
     api_url = mp.MeteoManager.historical
     options = mp.OptionsHistorical(latitude, longitude, start_date, end_date)
     daily = mp.DailyHistorical()
+
+    unsupported = [
+        variable for variable in variables
+        if not callable(getattr(daily, variable, None))
+    ]
+    if unsupported:
+        raise ValueError(
+            "Unsupported historical daily variable(s): "
+            + ", ".join(unsupported)
+        )
+
     for variable in variables:
-        if hasattr(daily, variable):
-            getattr(daily, variable)()
+        getattr(daily, variable)()
 
     manager = mp.MeteoManager(api_url, options, daily=daily)
     r = manager.fetch()
@@ -597,6 +607,17 @@ def make_ensemble_plot(de, df):
 
 def make_historical_plot(historical, variables, start_month=1):
     daily = historical['daily'].copy()
+    missing_variables = [
+        variable for variable in variables
+        if variable not in daily.columns
+    ]
+    if missing_variables:
+        raise ValueError(
+            "Historical data is missing selected variable(s): "
+            + ", ".join(missing_variables)
+            + ". Fetch historical weather again for the selected outputs."
+        )
+
     daily['time'] = pd.to_datetime(daily['time'])
     daily['season'] = daily['time'].apply(lambda t: t.year if t.month >= start_month else t.year - 1)
 
@@ -741,18 +762,21 @@ with col4:
         help='Click to get the forecast at the latitude-longitude above.',
         type='primary',
     ):
-        df = fetch_forcast(latitude, longitude)
-        aq = fetch_airquality(latitude, longitude)
-        de = fetch_ensemble(latitude, longitude)
+        try:
+            df = fetch_forcast(latitude, longitude)
+            aq = fetch_airquality(latitude, longitude)
+            de = fetch_ensemble(latitude, longitude)
 
-        f_fig = make_forecast_plot(df, aq)
-        e_fig = make_ensemble_plot(de, df)
+            f_fig = make_forecast_plot(df, aq)
+            e_fig = make_ensemble_plot(de, df)
 
-        st.session_state['df'] = df
-        st.session_state['de'] = de
-        st.session_state['aq'] = aq
-        st.session_state['f_fig'] = f_fig
-        st.session_state['e_fig'] = e_fig
+            st.session_state['df'] = df
+            st.session_state['de'] = de
+            st.session_state['aq'] = aq
+            st.session_state['f_fig'] = f_fig
+            st.session_state['e_fig'] = e_fig
+        except RuntimeError as e:
+            st.error(f"Forecast data could not be fetched: {e}")
 
 tabs = ['Forecast', 'Ensemble', 'Historical']
 
@@ -797,15 +821,34 @@ if tabs:
                     if not selected_vars:
                         st.warning('Please select at least one historical output before fetching.')
                     else:
-                        hist = fetch_historical(latitude, longitude, selected_vars, years_back)
-                        h_fig = make_historical_plot(hist, selected_vars, start_month)
+                        try:
+                            hist = fetch_historical(latitude, longitude, selected_vars, years_back)
+                            h_fig = make_historical_plot(hist, selected_vars, start_month)
 
-                        st.session_state['historical'] = hist
-                        st.session_state['h_fig'] = h_fig
-                        st.session_state['historical_vars'] = selected_vars
+                            st.session_state['historical'] = hist
+                            st.session_state['h_fig'] = h_fig
+                            st.session_state['historical_vars'] = selected_vars
+                        except (RuntimeError, ValueError) as e:
+                            st.error(f"Historical data could not be fetched: {e}")
 
-                if 'historical' in st.session_state and selected_vars:
-                    st.session_state['h_fig'] = make_historical_plot(st.session_state['historical'], selected_vars, start_month)
+                can_plot_historical = (
+                    'historical' in st.session_state
+                    and selected_vars
+                    and all(
+                        variable in st.session_state.get('historical_vars', [])
+                        for variable in selected_vars
+                    )
+                )
 
-                if 'h_fig' in st.session_state:
+                if can_plot_historical:
+                    try:
+                        st.session_state['h_fig'] = make_historical_plot(st.session_state['historical'], selected_vars, start_month)
+                    except ValueError as e:
+                        can_plot_historical = False
+                        st.session_state.pop('h_fig', None)
+                        st.error(f"Historical chart could not be rendered: {e}")
+                elif 'historical' in st.session_state and selected_vars:
+                    st.info('Fetch historical weather to update the chart for the selected outputs.')
+
+                if can_plot_historical and 'h_fig' in st.session_state:
                     st.plotly_chart(st.session_state['h_fig'], width='stretch')
