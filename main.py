@@ -19,6 +19,8 @@ from streamlit_extras.buy_me_a_coffee import button
 st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 
 debug = False
+DEFAULT_MAP_CENTER = [33.76634, -118.16699]
+DEFAULT_MAP_ZOOM = 12
 
 HISTORICAL_VARIABLE_OPTIONS = {
     'Weather Code': 'weather_code',
@@ -119,6 +121,11 @@ def fetch_elevation(latitude, longitude):
     r = manager.fetch()
     print("fetching elevation...")
     return r
+
+
+@st.cache_data(ttl=300)
+def fetch_rainviewer_frames():
+    return mp.fetch_rainviewer_radar_frames()
 
 
 def moving_average(data, window):
@@ -704,17 +711,25 @@ with col1:
 with col2:
     button(username="tporyzala", floating=False, width=221)
 
+selected_location = st.session_state.get('selected_location', DEFAULT_MAP_CENTER)
+
 # Initialize map
 tiles = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
 attr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
 m = folium.Map(
     # location=[47.6943, 11.7749],  # Tegernsee
     # location=[40.0401, -105.2631],  # Boulder
-    location = [33.76634, -118.16699],  # Long Beach
-    zoom_start=12,
+    location=DEFAULT_MAP_CENTER,
+    zoom_start=DEFAULT_MAP_ZOOM,
     tiles=tiles,
     attr=attr,
 )
+
+try:
+    radar_frames = fetch_rainviewer_frames()
+    mp.RainViewerRadarAnimation(radar_frames).add_to(m)
+except mp.RainViewerError as e:
+    st.warning(f"Radar overlay unavailable: {e}")
 
 folium.LatLngPopup().add_to(m)
 folium.plugins.Geocoder().add_to(m)
@@ -723,18 +738,26 @@ folium.plugins.MousePosition().add_to(m)
 
 cont1 = st.container(height=400)
 with cont1:
-    st_data = st_folium(m, width='stretch', height=340)
+    st_data = st_folium(
+        m,
+        width='stretch',
+        height=340,
+        key='weather_map',
+        returned_objects=['last_clicked'],
+    )
 
-if st_data['last_clicked'] is None:
-    if 'center' in st_data:
-        latitude = st_data['center']['lat']
-        longitude = st_data['center']['lng']
-    else:
-        latitude = 33.76634  # Default Long Beach
-        longitude = -118.16699
+if st_data.get('last_clicked') is not None:
+    selected_location = [
+        st_data['last_clicked']['lat'],
+        st_data['last_clicked']['lng'],
+    ]
+    st.session_state['selected_location'] = selected_location
 else:
-    latitude = st_data['last_clicked']['lat']
-    longitude = st_data['last_clicked']['lng']
+    selected_location = st.session_state.get('selected_location', DEFAULT_MAP_CENTER)
+
+selected_location = st.session_state.get('selected_location', DEFAULT_MAP_CENTER)
+latitude = selected_location[0]
+longitude = selected_location[1]
 
 col1, col2, col3, col4 = st.columns(4, vertical_alignment='center')
 

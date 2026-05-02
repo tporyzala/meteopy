@@ -14,3 +14,11 @@ from meteopy.Options.OptionsHistorical import OptionsHistorical
 from meteopy.Options.OptionsAirQuality import OptionsAirQuality
 
 from meteopy.MeteoManager.MeteoManager import MeteoManager
+from meteopy.RainViewer.RainViewer import (
+    RainViewerError,
+    RainViewerFrame,
+    RainViewerRadarAnimation,
+    build_rainviewer_tile_url,
+    fetch_rainviewer_radar_frames,
+    parse_rainviewer_radar_frames,
+)
