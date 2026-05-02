@@ -723,6 +723,7 @@ m = folium.Map(
     zoom_start=DEFAULT_MAP_ZOOM,
     tiles=tiles,
     attr=attr,
+    attribution_control=False,
 )
 
 try:
@@ -745,6 +746,7 @@ with cont1:
         key='weather_map',
         returned_objects=['last_clicked'],
     )
+st.caption('Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
 
 if st_data.get('last_clicked') is not None:
     selected_location = [
