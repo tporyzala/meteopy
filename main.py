@@ -820,11 +820,11 @@ if tabs:
                 else:
                     st.info('Ensemble is ready after you click Fetch Forecast!')
             elif tab_name == 'Historical':
-                years_back = st.slider('Years back', min_value=1, max_value=50, value=10, step=1)
+                years_back = st.slider('Years back', min_value=1, max_value=50, value=50, step=1)
 
                 start_month = st.slider('Start month', min_value=1, max_value=12, value=1, step=1)
 
-                default_labels = ['Temperature Max']
+                default_labels = ['Temperature Max', 'Temperature Min', 'Precipitation Sum']
                 if 'historical_vars' in st.session_state:
                     default_labels = [label for label, var in HISTORICAL_VARIABLE_OPTIONS.items() if var in st.session_state['historical_vars']]
 

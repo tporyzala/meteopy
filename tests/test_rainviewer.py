@@ -142,6 +142,9 @@ class RainViewerAnimationRenderTests(unittest.TestCase):
         self.assertIn('pane: "overlayPane"', rendered)
         self.assertIn("toggleRadar", rendered)
         self.assertIn("Hide radar overlay", rendered)
+        self.assertIn("toLocaleTimeString", rendered)
+        self.assertIn('timeZoneName: "short"', rendered)
+        self.assertIn("Radar frame time in your local time zone", rendered)
 
 
 if __name__ == "__main__":

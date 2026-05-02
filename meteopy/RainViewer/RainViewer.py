@@ -139,7 +139,7 @@ class RainViewerRadarAnimation(MacroElement):
                 width: 96px;
             }
             .rainviewer-control-{{ this.get_name() }} span {
-                min-width: 58px;
+                min-width: 84px;
                 text-align: right;
             }
         </style>
@@ -211,9 +211,28 @@ class RainViewerRadarAnimation(MacroElement):
                 }
             }
 
+            function formatFrameTime(frame) {
+                if (!frame || frame.time === null || frame.time === undefined) {
+                    return frame && frame.label ? frame.label : "";
+                }
+
+                try {
+                    return new Date(frame.time * 1000).toLocaleTimeString(
+                        [],
+                        {
+                            hour: "numeric",
+                            minute: "2-digit",
+                            timeZoneName: "short"
+                        }
+                    );
+                } catch (error) {
+                    return frame.label || "";
+                }
+            }
+
             function updateControl() {
                 if (labelNode) {
-                    labelNode.textContent = frames[currentIndex].label;
+                    labelNode.textContent = formatFrameTime(frames[currentIndex]);
                 }
                 if (sliderNode) {
                     sliderNode.value = currentIndex;
@@ -293,7 +312,8 @@ class RainViewerRadarAnimation(MacroElement):
                 sliderNode.title = "Radar frame time";
 
                 labelNode = L.DomUtil.create("span", "", container);
-                labelNode.textContent = frames[currentIndex].label;
+                labelNode.textContent = formatFrameTime(frames[currentIndex]);
+                labelNode.title = "Radar frame time in your local time zone";
 
                 L.DomEvent.disableClickPropagation(container);
                 L.DomEvent.disableScrollPropagation(container);
