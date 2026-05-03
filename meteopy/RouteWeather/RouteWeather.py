@@ -772,9 +772,12 @@ def _interpolate_forecast_at_time(hourly, target_time):
     target_ts = _timestamp(target_time)
     hourly_times = pd.to_datetime(hourly["time"]).map(_timestamp)
     if target_ts < hourly_times.min() or target_ts > hourly_times.max():
+        window_start = hourly_times.min().strftime("%Y-%m-%d %H:%M")
+        window_end = hourly_times.max().strftime("%Y-%m-%d %H:%M")
+        target_label = target_ts.strftime("%Y-%m-%d %H:%M")
         raise RouteWeatherError(
             "Selected route time is outside the fetched forecast window. "
-            "Fetch Route Weather again for the updated time range."
+            f"Requested {target_label}; fetched window is {window_start} to {window_end}."
         )
 
     continuous_columns = [
@@ -912,7 +915,7 @@ def classify_route_hazards(row):
     return ", ".join(hazards) if hazards else "Clear"
 
 
-def route_forecast_days_needed(route_end_time, now=None, max_days=16):
+def route_forecast_days_needed(route_end_time, now=None, max_days=16, buffer_days=1):
     now_ts = _timestamp(now if now is not None else pd.Timestamp.now())
     route_end_ts = _timestamp(route_end_time)
     days_needed = max(1, (route_end_ts.normalize() - now_ts.normalize()).days + 1)
@@ -920,4 +923,4 @@ def route_forecast_days_needed(route_end_time, now=None, max_days=16):
         raise RouteWeatherError(
             f"Route end time is beyond Open-Meteo's {max_days}-day forecast window"
         )
-    return int(days_needed)
+    return int(min(max_days, days_needed + max(0, int(buffer_days))))

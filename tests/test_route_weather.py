@@ -337,6 +337,22 @@ class RouteTimingTests(unittest.TestCase):
                 now=datetime(2026, 5, 2, 12, 0),
             )
 
+    def test_route_forecast_days_needed_adds_timezone_boundary_buffer(self):
+        self.assertEqual(
+            2,
+            route_forecast_days_needed(
+                datetime(2026, 5, 2, 23, 0),
+                now=datetime(2026, 5, 2, 12, 0),
+            ),
+        )
+        self.assertEqual(
+            16,
+            route_forecast_days_needed(
+                datetime(2026, 5, 17, 12, 0),
+                now=datetime(2026, 5, 2, 12, 0),
+            ),
+        )
+
 
 class RouteForecastParsingTests(unittest.TestCase):
     def test_linear_interpolation_by_time(self):
