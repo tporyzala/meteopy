@@ -1225,17 +1225,44 @@ def collect_route_anchor_times_from_state(waypoints):
     return anchor_times
 
 
+def clamp_date(value, min_date, max_date):
+    date_value = pd.Timestamp(value).date()
+    if date_value < min_date:
+        return min_date
+    if date_value > max_date:
+        return max_date
+    return date_value
+
+
+def initialize_bounded_date_state(key, default_value, min_date, max_date):
+    clamped_default = clamp_date(default_value, min_date, max_date)
+    current_value = st.session_state.get(key)
+    if current_value is None:
+        st.session_state[key] = clamped_default
+    else:
+        st.session_state[key] = clamp_date(current_value, min_date, max_date)
+    return st.session_state[key]
+
+
 def render_route_timing_controls(waypoints):
     default_start = route_start_default()
     default_end = route_end_default(waypoints, default_start)
+    route_date_min = pd.Timestamp.now().date()
+    route_date_max = (pd.Timestamp.now() + pd.Timedelta(days=15)).date()
+    default_start_date = initialize_bounded_date_state(
+        'route_start_date',
+        default_start.date(),
+        route_date_min,
+        route_date_max,
+    )
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         route_start_date = st.date_input(
             'Start date',
-            value=default_start.date(),
-            min_value=pd.Timestamp.now().date(),
-            max_value=(pd.Timestamp.now() + pd.Timedelta(days=15)).date(),
+            value=default_start_date,
+            min_value=route_date_min,
+            max_value=route_date_max,
             key='route_start_date',
         )
     with col2:
@@ -1245,12 +1272,19 @@ def render_route_timing_controls(waypoints):
             step=timedelta(minutes=15),
             key='route_start_time',
         )
+    route_end_min = max(route_date_min, route_start_date)
+    default_end_date = initialize_bounded_date_state(
+        'route_end_date',
+        default_end.date(),
+        route_end_min,
+        route_date_max,
+    )
     with col3:
         route_end_date = st.date_input(
             'End date',
-            value=default_end.date(),
-            min_value=pd.Timestamp.now().date(),
-            max_value=(pd.Timestamp.now() + pd.Timedelta(days=15)).date(),
+            value=default_end_date,
+            min_value=route_end_min,
+            max_value=route_date_max,
             key='route_end_date',
         )
     with col4:

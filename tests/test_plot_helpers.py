@@ -48,6 +48,22 @@ class PlotHelperTests(unittest.TestCase):
         self.assertEqual([2.0, 4.0], bins["rain"].tolist())
         self.assertEqual([0.0, 0.0], bins["showers"].tolist())
 
+    def test_clamp_date_respects_bounds(self):
+        clamp_date = self._load_function("clamp_date")
+
+        self.assertEqual(
+            pd.Timestamp("2026-05-02").date(),
+            clamp_date("2026-05-01", pd.Timestamp("2026-05-02").date(), pd.Timestamp("2026-05-10").date()),
+        )
+        self.assertEqual(
+            pd.Timestamp("2026-05-10").date(),
+            clamp_date("2026-05-15", pd.Timestamp("2026-05-02").date(), pd.Timestamp("2026-05-10").date()),
+        )
+        self.assertEqual(
+            pd.Timestamp("2026-05-06").date(),
+            clamp_date("2026-05-06", pd.Timestamp("2026-05-02").date(), pd.Timestamp("2026-05-10").date()),
+        )
+
     @staticmethod
     def _load_function(name):
         tree = ast.parse((ROOT / "main.py").read_text())
