@@ -1232,10 +1232,11 @@ def render_route_timing_controls(waypoints):
     with col1:
         spacing_km = st.number_input(
             'Sample spacing (km)',
-            min_value=1.0,
+            min_value=0.1,
             max_value=50.0,
             value=10.0,
-            step=1.0,
+            step=0.1,
+            format='%.1f',
             key='route_spacing_km',
         )
     with col2:
@@ -1247,6 +1248,7 @@ def render_route_timing_controls(waypoints):
             step=5,
             key='route_max_samples',
         )
+        st.caption('Caps automatic spacing samples. Selected waypoints are always included in addition to this cap.')
 
     start_dt = datetime.combine(route_start_date, route_start_time)
     end_dt = datetime.combine(route_end_date, route_end_time)
@@ -1322,21 +1324,194 @@ def render_route_timing_controls(waypoints):
 
 def make_route_plot(report, units):
     route_hourly = report.copy()
-    plot_payload = {
-        'hourly': route_hourly,
-        'daily': pd.DataFrame(),
-        'current': {'time': route_hourly['time'].iloc[0]},
-        'hourly_units': units,
-    }
-    return make_forecast_plot(plot_payload)
+    if 'is_route_sample' in route_hourly.columns:
+        route_samples = route_hourly[route_hourly['is_route_sample'].astype(bool)]
+    else:
+        route_samples = route_hourly.iloc[0:0]
+
+    route_fig = make_subplots(
+        rows=6,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.02,
+        specs=[
+            [{'secondary_y': True}],
+            [{'secondary_y': True}],
+            [{'secondary_y': True}],
+            [{'secondary_y': True}],
+            [{'secondary_y': True}],
+            [{'secondary_y': True}],
+        ],
+    )
+
+    if 'elevation' in route_hourly.columns and route_hourly['elevation'].notna().any():
+        route_fig.add_trace(
+            go.Scatter(
+                x=route_hourly['time'],
+                y=route_hourly['elevation'],
+                name='Elevation',
+                fill='tozeroy',
+                line=dict(color='saddlebrown', width=2),
+                fillcolor='rgba(139, 92, 45, 0.22)',
+                customdata=route_hourly[['distance_km']].to_numpy(),
+                hovertemplate='Elevation %{y:.0f} m<br>Distance %{customdata[0]:.2f} km<br>%{x}<extra></extra>',
+                legendgroup='profile',
+            ),
+            secondary_y=False,
+            row=1,
+            col=1,
+        )
+
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=route_hourly['temperature_2m'], name='Temperature', line=dict(color='firebrick'), opacity=1, legendgroup='1',
+        ),
+        secondary_y=False, row=2, col=1,
+    )
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=route_hourly['apparent_temperature'], name='Feels like', line=dict(color='firebrick'), opacity=0.4, legendgroup='1',
+        ),
+        secondary_y=False, row=2, col=1,
+    )
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=route_hourly['dew_point_2m'], name='Dewpoint', line=dict(color='forestgreen'), opacity=0.4, legendgroup='1',
+        ),
+        secondary_y=False, row=2, col=1,
+    )
+    route_fig.add_hline(
+        y=0, row=2, col=1, opacity=0.5, line=dict(color='rgb(0,0,255)')
+    )
+
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=route_hourly['relative_humidity_2m'], name='Humidity', line=dict(color='darkblue'), opacity=0.4, legendgroup='1',
+        ),
+        secondary_y=False, row=3, col=1,
+    )
+
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=route_hourly['precipitation_probability'], name='Precip. %', fill='tozeroy', line_color='rgba(165,210,225,0.8)', fillcolor='rgba(165,210,225,0.8)', legendgroup='2',
+        ),
+        secondary_y=False, row=4, col=1,
+    )
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=moving_average(route_hourly['cloud_cover'], 3), fill='tozeroy', line_color='rgba(0,0,0,0.1)', fillcolor='rgba(0,0,0,0.1)', name='Cloud Cover', legendgroup='2',
+        ),
+        secondary_y=False, row=4, col=1,
+    )
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=moving_average(route_hourly['surface_pressure'], 3), name='Pressure', legendgroup='2', line=dict(color='rgba(0,0,0,0.95)')
+        ),
+        secondary_y=True, row=4, col=1,
+    )
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=route_hourly['weathercode'], name='WCO', legendgroup='2',
+        ),
+        secondary_y=False, row=4, col=1,
+    )
+
+    route_fig.add_trace(
+        go.Bar(
+            x=route_hourly['time'], y=route_hourly['rain'], name='Rain', legendgroup='3',
+        ),
+        secondary_y=False, row=5, col=1,
+    )
+    route_fig.add_trace(
+        go.Bar(
+            x=route_hourly['time'], y=route_hourly['showers'], name='Shower', legendgroup='3',
+        ),
+        secondary_y=False, row=5, col=1,
+    )
+    route_fig.add_trace(
+        go.Bar(
+            x=route_hourly['time'], y=route_hourly['snowfall'] * 10, name='Snow', legendgroup='3',
+        ),
+        secondary_y=False, row=5, col=1,
+    )
+
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=moving_average(route_hourly['wind_speed_10m'], 3), name='Wind Speed', legendgroup='4', line=dict(color='royalblue'),
+        ),
+        secondary_y=False, row=6, col=1,
+    )
+    route_fig.add_trace(
+        go.Scatter(
+            x=route_hourly['time'], y=moving_average(route_hourly['wind_gusts_10m'], 3), name='Wind Gusts', legendgroup='4', line=dict(color='darkorange'),
+        ),
+        secondary_y=False, row=6, col=1,
+    )
+
+    marker_specs = [
+        ('elevation', 1, False, 'Elevation sample', 'saddlebrown'),
+        ('temperature_2m', 2, False, 'Temperature sample', 'firebrick'),
+        ('apparent_temperature', 2, False, 'Feels-like sample', 'rgba(178,34,34,0.55)'),
+        ('dew_point_2m', 2, False, 'Dewpoint sample', 'forestgreen'),
+        ('relative_humidity_2m', 3, False, 'Humidity sample', 'darkblue'),
+        ('precipitation_probability', 4, False, 'Precip. % sample', 'rgba(74,144,164,0.9)'),
+        ('cloud_cover', 4, False, 'Cloud sample', 'rgba(80,80,80,0.65)'),
+        ('surface_pressure', 4, True, 'Pressure sample', 'black'),
+        ('wind_speed_10m', 6, False, 'Wind sample', 'royalblue'),
+        ('wind_gusts_10m', 6, False, 'Gust sample', 'darkorange'),
+    ]
+    for column, row, secondary_y, name, color in marker_specs:
+        if column not in route_samples.columns or route_samples.empty:
+            continue
+        route_fig.add_trace(
+            go.Scatter(
+                x=route_samples['time'],
+                y=route_samples[column],
+                mode='markers',
+                marker=dict(color=color, size=4, symbol='circle', opacity=0.75),
+                name=name,
+                legendgroup='route_samples',
+                showlegend=False,
+                hovertemplate=f'{name}<br>%{{x}}<br>%{{y}}<extra></extra>',
+            ),
+            secondary_y=secondary_y,
+            row=row,
+            col=1,
+        )
+    route_fig.add_vline(
+        x=route_hourly['time'].iloc[0], row='all', col=1, opacity=0.5, line=dict(color='rgb(100,100,100)')
+    )
+    route_fig.update_layout(
+        hovermode='x',
+        hoverlabel=dict(bgcolor='rgba(255,255,255,0.5)'),
+        legend_tracegroupgap=90,
+        height=1450,
+        barmode='stack',
+        legend=dict(orientation='h', groupclick='toggleitem'),
+    )
+    for row in range(1, 7):
+        route_fig.update_xaxes(showticklabels=True, row=row, col=1)
+    route_fig.update_yaxes(title_text='Elevation', ticksuffix='m', row=1, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Temperature', ticksuffix=units.get('temperature_2m', ''), row=2, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Relative Humidity %', ticksuffix=units.get('relative_humidity_2m', ''), range=[0, 100], row=3, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Precipitation &</br></br> Cloud Cover %', ticksuffix=units.get('precipitation_probability', ''), range=[0, 100], row=4, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Pressure', ticksuffix=units.get('surface_pressure', ''), rangemode='nonnegative', row=4, col=1, secondary_y=True)
+    route_fig.update_yaxes(title_text='Precipitation', ticksuffix=units.get('precipitation', units.get('rain', '')), rangemode='nonnegative', row=5, col=1, secondary_y=False)
+    route_fig.update_yaxes(showgrid=False, showticklabels=False, row=5, col=1, secondary_y=True)
+    route_fig.update_yaxes(title_text='Wind Speed', ticksuffix=units.get('wind_speed_10m', ''), rangemode='nonnegative', row=6, col=1, secondary_y=False)
+    route_fig.update_yaxes(showgrid=False, showticklabels=False, row=6, col=1, secondary_y=True)
+    return route_fig
 
 
 def format_route_report_table(report):
     table = report.copy()
-    table['time'] = pd.to_datetime(table['time']).dt.strftime('%Y-%m-%d %H:%M')
+    table['time'] = pd.to_datetime(table['time']).dt.strftime('%Y-%m-%d %H:%M:%S')
     columns = [
         'time',
+        'is_route_sample',
+        'waypoint',
         'distance_km',
+        'elevation',
         'lat',
         'lng',
         'temperature_2m',
@@ -1352,12 +1527,17 @@ def format_route_report_table(report):
         'hazards',
     ]
     table = table[[column for column in columns if column in table.columns]]
+    if 'is_route_sample' in table.columns:
+        table['is_route_sample'] = table['is_route_sample'].map(lambda value: 'Yes' if value else '')
     for column in table.select_dtypes(include='number').columns:
         table[column] = table[column].round(2)
     return table.rename(
         columns={
             'time': 'Time',
+            'is_route_sample': 'Sample',
+            'waypoint': 'Waypoint',
             'distance_km': 'Distance km',
+            'elevation': 'Elevation m',
             'lat': 'Latitude',
             'lng': 'Longitude',
             'temperature_2m': 'Temp C',
@@ -1447,6 +1627,7 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
         {
             'Waypoint': list(range(1, len(waypoints) + 1)),
             'ETA': waypoint_etas,
+            'Distance km': waypoint_distances if waypoint_distances else mp.cumulative_route_distances(waypoints),
             'Latitude': [waypoint['lat'] for waypoint in waypoints],
             'Longitude': [waypoint['lng'] for waypoint in waypoints],
         }
@@ -1498,6 +1679,8 @@ def fetch_and_store_route_weather(
         route_geometry,
         spacing_km=spacing_km,
         max_samples=max_samples,
+        forced_points=waypoints,
+        forced_distances=waypoint_distances,
     )
     forecast_days = mp.route_forecast_days_needed(waypoint_etas[-1])
     forecasts = mp.fetch_route_forecasts(route_sample_geometry, forecast_days=forecast_days)
@@ -1562,6 +1745,8 @@ def render_route_results():
         waypoint_schedule = st.session_state['route_waypoint_schedule'].copy()
         waypoint_schedule['ETA'] = pd.to_datetime(waypoint_schedule['ETA']).dt.strftime('%Y-%m-%d %H:%M')
         waypoint_schedule[['Latitude', 'Longitude']] = waypoint_schedule[['Latitude', 'Longitude']].round(5)
+        if 'Distance km' in waypoint_schedule.columns:
+            waypoint_schedule['Distance km'] = waypoint_schedule['Distance km'].round(2)
         st.dataframe(waypoint_schedule, width='stretch', hide_index=True)
 
     st.dataframe(

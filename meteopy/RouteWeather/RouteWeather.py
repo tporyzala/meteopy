@@ -152,7 +152,27 @@ def _interpolate_point_at_distance(waypoints, cumulative_distances, distance_km)
     }
 
 
-def sample_route(waypoints, spacing_km=10.0, max_samples=40):
+def _dedupe_route_samples(samples, distance_precision=5):
+    deduped = {}
+    for sample in samples:
+        key = round(float(sample["distance_km"]), distance_precision)
+        current = deduped.get(key)
+        if current is None or sample.get("sample_type") == "waypoint":
+            deduped[key] = sample
+
+    return [
+        deduped[key]
+        for key in sorted(deduped)
+    ]
+
+
+def sample_route(
+    waypoints,
+    spacing_km=10.0,
+    max_samples=40,
+    forced_points=None,
+    forced_distances=None,
+):
     if spacing_km <= 0:
         raise ValueError("Route sample spacing must be greater than 0")
     if max_samples < 2:
@@ -183,10 +203,37 @@ def sample_route(waypoints, spacing_km=10.0, max_samples=40):
             for index in range(max_samples)
         ]
 
-    return [
-        _interpolate_point_at_distance(waypoints, cumulative_distances, distance)
-        for distance in sample_distances
-    ]
+    samples = []
+    for distance in sample_distances:
+        samples.append(
+            {
+                **_interpolate_point_at_distance(waypoints, cumulative_distances, distance),
+                "sample_type": "interval",
+                "waypoint_index": None,
+            }
+        )
+
+    if forced_points is not None or forced_distances is not None:
+        if forced_points is None or forced_distances is None:
+            raise ValueError("Forced route samples require both points and distances")
+        if len(forced_points) != len(forced_distances):
+            raise ValueError("Forced route sample point and distance counts must match")
+
+        for index, (point, distance) in enumerate(zip(forced_points, forced_distances)):
+            route_point = _interpolate_point_at_distance(waypoints, cumulative_distances, distance)
+            lat, lng = _lat_lng(point)
+            samples.append(
+                {
+                    **route_point,
+                    "lat": lat,
+                    "lng": lng,
+                    "distance_km": min(max(float(distance), 0.0), total_distance),
+                    "sample_type": "waypoint",
+                    "waypoint_index": index,
+                }
+            )
+
+    return _dedupe_route_samples(samples)
 
 
 def calculate_route_waypoint_etas(
@@ -391,7 +438,7 @@ def attach_route_sample_etas(samples, waypoints, waypoint_etas, waypoint_distanc
     ]
 
 
-def build_hourly_timeline(start_time, end_time):
+def build_hourly_timeline(start_time, end_time, extra_times=None):
     start_ts = _timestamp(start_time)
     end_ts = _timestamp(end_time)
     if end_ts < start_ts:
@@ -409,7 +456,12 @@ def build_hourly_timeline(start_time, end_time):
     if end_ts != timeline[-1]:
         timeline.append(end_ts)
 
-    return timeline
+    for value in extra_times or []:
+        extra_ts = _timestamp(value)
+        if start_ts <= extra_ts <= end_ts:
+            timeline.append(extra_ts)
+
+    return sorted(set(timeline))
 
 
 def linear_interpolate_by_time(rows, timeline, numeric_columns=None, nearest_columns=None):
@@ -667,6 +719,7 @@ def parse_route_forecast_response(payload, expected_count=None):
             {
                 "latitude": location.get("latitude"),
                 "longitude": location.get("longitude"),
+                "elevation": location.get("elevation"),
                 "timezone": location.get("timezone"),
                 "timezone_abbreviation": location.get("timezone_abbreviation"),
                 "hourly_units": hourly_units,
@@ -748,25 +801,39 @@ def build_route_hourly_report(samples, forecasts):
 
     sample_rows = []
     units = {}
+    waypoint_times = {}
 
     for sample, forecast in zip(samples, forecasts):
         forecast_row = _interpolate_forecast_at_time(forecast["hourly"], sample["eta"])
         units.update(forecast.get("hourly_units", {}))
+        sample_time = _timestamp(sample["eta"])
+        waypoint_index = sample.get("waypoint_index")
+        if sample.get("sample_type") == "waypoint" and waypoint_index is not None:
+            waypoint_times.setdefault(sample_time, []).append(f"Waypoint {int(waypoint_index) + 1}")
         sample_rows.append(
             {
                 **forecast_row,
-                "time": _timestamp(sample["eta"]),
+                "time": sample_time,
                 "distance_km": sample["distance_km"],
                 "lat": sample["lat"],
                 "lng": sample["lng"],
+                "elevation": forecast.get("elevation"),
+                "is_route_sample": True,
             }
         )
 
-    timeline = build_hourly_timeline(sample_rows[0]["time"], sample_rows[-1]["time"])
+    sample_rows = sorted(sample_rows, key=lambda row: row["time"])
+    sample_times = [row["time"] for row in sample_rows]
+    timeline = build_hourly_timeline(
+        sample_rows[0]["time"],
+        sample_rows[-1]["time"],
+        extra_times=sample_times,
+    )
     numeric_columns = [
         "distance_km",
         "lat",
         "lng",
+        "elevation",
         "temperature_2m",
         "apparent_temperature",
         "dew_point_2m",
@@ -792,6 +859,15 @@ def build_route_hourly_report(samples, forecasts):
     )
     if "weathercode" in report.columns:
         report["weathercode"] = report["weathercode"].round().astype("Int64")
+    report["waypoint"] = [
+        ", ".join(waypoint_times.get(_timestamp(value), []))
+        for value in report["time"]
+    ]
+    sample_time_set = set(sample_times)
+    report["is_route_sample"] = [
+        _timestamp(value) in sample_time_set
+        for value in report["time"]
+    ]
     report["hazards"] = report.apply(classify_route_hazards, axis=1)
 
     return report, units

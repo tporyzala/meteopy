@@ -83,6 +83,36 @@ class RouteGeometryTests(unittest.TestCase):
         self.assertAlmostEqual(0.0, samples[0]["lng"])
         self.assertAlmostEqual(1.0, samples[-1]["lng"])
 
+    def test_sample_route_always_includes_forced_waypoint_samples(self):
+        route_geometry = [
+            {"lat": 0, "lng": 0},
+            {"lat": 0, "lng": 1},
+        ]
+        waypoint = {"lat": 0.25, "lng": 0.5}
+
+        samples = sample_route(
+            route_geometry,
+            spacing_km=1,
+            max_samples=2,
+            forced_points=[
+                {"lat": 0, "lng": 0},
+                waypoint,
+                {"lat": 0, "lng": 1},
+            ],
+            forced_distances=[0.0, 55.6, 111.2],
+        )
+
+        forced_samples = [
+            sample for sample in samples
+            if sample.get("sample_type") == "waypoint"
+        ]
+
+        self.assertEqual(3, len(forced_samples))
+        self.assertGreater(len(samples), 2)
+        self.assertEqual(1, forced_samples[1]["waypoint_index"])
+        self.assertAlmostEqual(0.25, forced_samples[1]["lat"])
+        self.assertAlmostEqual(0.5, forced_samples[1]["lng"])
+
     def test_parse_openrouteservice_route_extracts_geometry_and_waypoint_distances(self):
         payload = {
             "features": [
@@ -349,6 +379,7 @@ class RouteForecastParsingTests(unittest.TestCase):
             {
                 "latitude": 33.1,
                 "longitude": -118.1,
+                "elevation": 2100.0,
                 "hourly_units": {"temperature_2m": "C", "weather_code": "wmo code"},
                 "hourly": {
                     "time": ["2026-05-02T08:00"],
@@ -372,6 +403,7 @@ class RouteForecastParsingTests(unittest.TestCase):
         self.assertEqual(2, len(parsed))
         self.assertIn("weathercode", parsed[0]["hourly"].columns)
         self.assertEqual("wmo code", parsed[0]["hourly_units"]["weathercode"])
+        self.assertEqual(2100.0, parsed[0]["elevation"])
 
     def test_parse_open_meteo_error_raises_clear_error(self):
         with self.assertRaisesRegex(RouteWeatherError, "bad variable"):
@@ -516,6 +548,83 @@ class RouteForecastParsingTests(unittest.TestCase):
         self.assertEqual(10.0, report.loc[1, "distance_km"])
         self.assertIn(report.loc[1, "weathercode"], [0, 51])
         self.assertEqual("C", units["temperature_2m"])
+
+    def test_build_route_hourly_report_preserves_non_hourly_sample_rows(self):
+        samples = [
+            {
+                "lat": 33.0,
+                "lng": -118.0,
+                "distance_km": 0.0,
+                "eta": pd.Timestamp("2026-05-02 08:00"),
+                "sample_type": "interval",
+            },
+            {
+                "lat": 33.5,
+                "lng": -118.5,
+                "distance_km": 10.0,
+                "eta": pd.Timestamp("2026-05-02 08:30"),
+                "sample_type": "interval",
+            },
+            {
+                "lat": 34.0,
+                "lng": -119.0,
+                "distance_km": 20.0,
+                "eta": pd.Timestamp("2026-05-02 10:00"),
+                "sample_type": "interval",
+            },
+        ]
+        forecasts = [
+            self._forecast([10, 10, 10], [0, 0, 0]),
+            self._forecast([20, 20, 20], [51, 51, 51]),
+            self._forecast([30, 30, 30], [61, 61, 61]),
+        ]
+
+        report, _ = build_route_hourly_report(samples, forecasts)
+
+        self.assertIn(pd.Timestamp("2026-05-02 08:30"), report["time"].tolist())
+        sample_row = report[report["time"] == pd.Timestamp("2026-05-02 08:30")].iloc[0]
+        self.assertTrue(sample_row["is_route_sample"])
+        self.assertEqual(20.0, sample_row["temperature_2m"])
+
+    def test_build_route_hourly_report_includes_waypoint_eta_rows_and_elevation(self):
+        samples = [
+            {
+                "lat": 33.0,
+                "lng": -118.0,
+                "distance_km": 0.0,
+                "eta": pd.Timestamp("2026-05-02 08:00"),
+                "sample_type": "waypoint",
+                "waypoint_index": 0,
+            },
+            {
+                "lat": 33.5,
+                "lng": -118.5,
+                "distance_km": 10.0,
+                "eta": pd.Timestamp("2026-05-02 08:30"),
+                "sample_type": "waypoint",
+                "waypoint_index": 1,
+            },
+            {
+                "lat": 34.0,
+                "lng": -119.0,
+                "distance_km": 20.0,
+                "eta": pd.Timestamp("2026-05-02 10:00"),
+                "sample_type": "waypoint",
+                "waypoint_index": 2,
+            },
+        ]
+        forecasts = [
+            {**self._forecast([10, 10, 10], [0, 0, 0]), "elevation": 100.0},
+            {**self._forecast([20, 20, 20], [51, 51, 51]), "elevation": 2000.0},
+            {**self._forecast([30, 30, 30], [61, 61, 61]), "elevation": 300.0},
+        ]
+
+        report, _ = build_route_hourly_report(samples, forecasts)
+
+        waypoint_row = report[report["time"] == pd.Timestamp("2026-05-02 08:30")].iloc[0]
+        self.assertEqual("Waypoint 2", waypoint_row["waypoint"])
+        self.assertEqual(20.0, waypoint_row["temperature_2m"])
+        self.assertEqual(2000.0, waypoint_row["elevation"])
 
     def test_build_route_hourly_report_rejects_times_outside_forecast_window(self):
         samples = [
