@@ -20,6 +20,17 @@ from plotly.subplots import make_subplots
 import plotly.figure_factory as ff
 from math import radians, isclose
 from streamlit_extras.buy_me_a_coffee import button
+from meteopy.RouteWeather.RouteWeather import (
+    RouteWeatherError,
+    attach_route_sample_etas,
+    build_route_hourly_report,
+    calculate_route_waypoint_times,
+    cumulative_route_distances,
+    fetch_openrouteservice_route,
+    fetch_route_forecasts,
+    route_forecast_days_needed,
+    sample_route,
+)
 
 st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 
@@ -1144,7 +1155,7 @@ def route_end_default(waypoints, start_dt):
     if len(waypoints) >= 2:
         duration_hours = max(
             1.0,
-            mp.cumulative_route_distances(waypoints)[-1] / 5.0,
+            cumulative_route_distances(waypoints)[-1] / 5.0,
         )
     return (pd.Timestamp(start_dt) + pd.Timedelta(hours=duration_hours)).to_pydatetime()
 
@@ -1277,7 +1288,7 @@ def render_route_timing_controls(waypoints):
     waypoint_distances = active_route_waypoint_distances(waypoints)
     if len(waypoints) >= 3:
         try:
-            estimated_etas = mp.calculate_route_waypoint_times(
+            estimated_etas = calculate_route_waypoint_times(
                 waypoints,
                 start_dt,
                 end_dt,
@@ -1603,15 +1614,15 @@ def resolve_route_path(waypoints, route_path_label, route_profile, openrouteserv
                 {'lat': waypoint['lat'], 'lng': waypoint['lng']}
                 for waypoint in waypoints
             ],
-            'waypoint_distances_km': mp.cumulative_route_distances(waypoints),
-            'distance_km': mp.cumulative_route_distances(waypoints)[-1],
+            'waypoint_distances_km': cumulative_route_distances(waypoints),
+            'distance_km': cumulative_route_distances(waypoints)[-1],
             'duration_seconds': None,
         }
 
     if not openrouteservice_api_key:
         raise ValueError('OpenRouteService API key is required for snapped route paths.')
 
-    return mp.fetch_openrouteservice_route(
+    return fetch_openrouteservice_route(
         waypoints,
         route_profile,
         openrouteservice_api_key,
@@ -1626,26 +1637,26 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
         raise ValueError('Fetch route weather before adjusting route timing.')
 
     waypoint_distances = st.session_state.get('route_waypoint_distances_km')
-    waypoint_etas = mp.calculate_route_waypoint_times(
+    waypoint_etas = calculate_route_waypoint_times(
         waypoints,
         start_dt,
         end_dt,
         anchor_times,
         waypoint_distances=waypoint_distances,
     )
-    route_samples = mp.attach_route_sample_etas(
+    route_samples = attach_route_sample_etas(
         st.session_state['route_sample_geometry'],
         waypoints,
         waypoint_etas,
         waypoint_distances=waypoint_distances,
     )
-    report, units = mp.build_route_hourly_report(
+    report, units = build_route_hourly_report(
         route_samples,
         st.session_state['route_forecasts'],
     )
     route_fig = make_route_plot(report, units)
 
-    total_distance = waypoint_distances[-1] if waypoint_distances else mp.cumulative_route_distances(waypoints)[-1]
+    total_distance = waypoint_distances[-1] if waypoint_distances else cumulative_route_distances(waypoints)[-1]
     route_duration = waypoint_etas[-1] - pd.Timestamp(start_dt)
 
     st.session_state['route_report'] = report
@@ -1656,7 +1667,7 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
         {
             'Waypoint': list(range(1, len(waypoints) + 1)),
             'ETA': waypoint_etas,
-            'Distance km': waypoint_distances if waypoint_distances else mp.cumulative_route_distances(waypoints),
+            'Distance km': waypoint_distances if waypoint_distances else cumulative_route_distances(waypoints),
             'Latitude': [waypoint['lat'] for waypoint in waypoints],
             'Longitude': [waypoint['lng'] for waypoint in waypoints],
         }
@@ -1697,22 +1708,22 @@ def fetch_and_store_route_weather(
     route_geometry = route_path['geometry']
     waypoint_distances = route_path['waypoint_distances_km']
 
-    waypoint_etas = mp.calculate_route_waypoint_times(
+    waypoint_etas = calculate_route_waypoint_times(
         waypoints,
         start_dt,
         end_dt,
         anchor_times,
         waypoint_distances=waypoint_distances,
     )
-    route_sample_geometry = mp.sample_route(
+    route_sample_geometry = sample_route(
         route_geometry,
         spacing_km=spacing_km,
         max_samples=max_samples,
         forced_points=waypoints,
         forced_distances=waypoint_distances,
     )
-    forecast_days = mp.route_forecast_days_needed(waypoint_etas[-1])
-    forecasts = mp.fetch_route_forecasts(route_sample_geometry, forecast_days=forecast_days)
+    forecast_days = route_forecast_days_needed(waypoint_etas[-1])
+    forecasts = fetch_route_forecasts(route_sample_geometry, forecast_days=forecast_days)
 
     st.session_state['route_sample_geometry'] = route_sample_geometry
     st.session_state['route_forecasts'] = forecasts
@@ -1741,7 +1752,7 @@ def sync_cached_route_report(waypoints, start_dt, end_dt, spacing_km, max_sample
 
     try:
         store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times)
-    except (ValueError, mp.RouteWeatherError) as e:
+    except (ValueError, RouteWeatherError) as e:
         clear_route_results()
         st.warning(f"Route timing could not be re-interpolated: {e}")
 
@@ -1817,7 +1828,7 @@ def render_route_weather_tool():
                 openrouteservice_api_key,
             )
             st.rerun()
-        except (RuntimeError, ValueError, mp.RouteWeatherError) as e:
+        except (RuntimeError, ValueError, RouteWeatherError) as e:
             clear_route_results()
             st.error(f"Route weather could not be fetched: {e}")
     else:
