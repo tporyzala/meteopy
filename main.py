@@ -834,30 +834,68 @@ def render_point_forecast_tool():
     latitude = selected_location[0]
     longitude = selected_location[1]
 
-    col1, col2, col3, col4 = st.columns(4, vertical_alignment='center')
+    elevation_label = 'Unavailable'
+    try:
+        elevation_data = fetch_elevation(
+            round(latitude, 4), round(longitude, 4))
+        elevation = elevation_data.get('elevation', [None])[
+            0] if 'elevation' in elevation_data else None
+        if elevation is not None:
+            elevation_ft = elevation * 3.28084
+            elevation_label = f"{elevation:.1f} m / {elevation_ft:.1f} ft"
+    except Exception as e:
+        elevation_label = 'Error'
+        if debug:
+            st.error(f"Elevation fetch error: {e}")
 
-    with col1:
-        st.metric(label='Latitude', value=f"{latitude:.4f}")
+    summary_col, action_col = st.columns(
+        [3, 1], vertical_alignment='center')
+    with summary_col:
+        st.markdown(
+            f"""
+            <style>
+                .location-summary-table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 0.1rem 0 0.45rem;
+                    font-size: 0.88rem;
+                }}
+                .location-summary-table th {{
+                    color: #475569;
+                    font-weight: 600;
+                    padding: 0.25rem 0.55rem;
+                    text-align: left;
+                    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+                }}
+                .location-summary-table td {{
+                    color: #0f172a;
+                    font-weight: 650;
+                    padding: 0.35rem 0.55rem;
+                    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+                    background: rgba(248, 250, 252, 0.85);
+                }}
+            </style>
+            <table class="location-summary-table">
+                <thead>
+                    <tr>
+                        <th>Latitude</th>
+                        <th>Longitude</th>
+                        <th>Elevation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{latitude:.4f}</td>
+                        <td>{longitude:.4f}</td>
+                        <td>{elevation_label}</td>
+                    </tr>
+                </tbody>
+            </table>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    with col2:
-        st.metric(label='Longitude', value=f"{longitude:.4f}")
-
-    with col3:
-        try:
-            elevation_data = fetch_elevation(
-                round(latitude, 4), round(longitude, 4))
-            elevation = elevation_data.get('elevation', [None])[
-                0] if 'elevation' in elevation_data else None
-            if elevation is not None:
-                elevation_ft = elevation * 3.28084
-                st.metric(label='Elevation',
-                          value=f"{elevation:.1f} m / {elevation_ft:.1f} ft")
-        except Exception as e:
-            st.metric(label='Elevation', value='Error')
-            if debug:
-                st.error(f"Elevation fetch error: {e}")
-
-    with col4:
+    with action_col:
         if st.button(
             label='Fetch Forecast!',
             help='Click to get the forecast at the latitude-longitude above.',
