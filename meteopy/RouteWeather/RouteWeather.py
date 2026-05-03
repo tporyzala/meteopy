@@ -37,6 +37,11 @@ ROUTE_HOURLY_VARIABLES = [
     "visibility",
 ]
 
+ROUTE_DAILY_VARIABLES = [
+    "sunrise",
+    "sunset",
+]
+
 ROUTE_PLOT_VARIABLES = [
     "temperature_2m",
     "apparent_temperature",
@@ -715,6 +720,12 @@ def parse_route_forecast_response(payload, expected_count=None):
             if "weather_code" in hourly_units:
                 hourly_units["weathercode"] = hourly_units["weather_code"]
 
+        daily = pd.DataFrame(location.get("daily", {}))
+        if not daily.empty:
+            for column in ["time", "sunrise", "sunset"]:
+                if column in daily.columns:
+                    daily[column] = pd.to_datetime(daily[column]).map(_timestamp)
+
         parsed.append(
             {
                 "latitude": location.get("latitude"),
@@ -723,7 +734,9 @@ def parse_route_forecast_response(payload, expected_count=None):
                 "timezone": location.get("timezone"),
                 "timezone_abbreviation": location.get("timezone_abbreviation"),
                 "hourly_units": hourly_units,
+                "daily_units": dict(location.get("daily_units", {})),
                 "hourly": hourly,
+                "daily": daily,
             }
         )
 
@@ -738,6 +751,7 @@ def fetch_route_forecasts(samples, forecast_days=7, timeout=20):
         "latitude": ",".join(_format_coordinate(sample["lat"]) for sample in samples),
         "longitude": ",".join(_format_coordinate(sample["lng"]) for sample in samples),
         "hourly": ",".join(ROUTE_HOURLY_VARIABLES),
+        "daily": ",".join(ROUTE_DAILY_VARIABLES),
         "forecast_days": int(forecast_days),
         "timezone": "auto",
         "temperature_unit": "celsius",
@@ -766,6 +780,15 @@ def fetch_route_forecasts(samples, forecast_days=7, timeout=20):
         raise RouteWeatherError("Open-Meteo route forecast returned invalid JSON") from exc
 
     return parse_route_forecast_response(payload, expected_count=len(samples))
+
+
+def route_sun_daily(forecasts):
+    for forecast in forecasts:
+        daily = forecast.get("daily") if isinstance(forecast, dict) else None
+        if isinstance(daily, pd.DataFrame) and {"time", "sunrise", "sunset"}.issubset(daily.columns):
+            return daily[["time", "sunrise", "sunset"]].copy()
+
+    return pd.DataFrame(columns=["time", "sunrise", "sunset"])
 
 
 def _interpolate_forecast_at_time(hourly, target_time):

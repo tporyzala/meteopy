@@ -29,6 +29,7 @@ from meteopy.RouteWeather.RouteWeather import (
     fetch_openrouteservice_route,
     fetch_route_forecasts,
     route_forecast_days_needed,
+    route_sun_daily,
     sample_route,
 )
 
@@ -945,6 +946,7 @@ def clear_route_results():
         'route_report',
         'route_fig',
         'route_units',
+        'route_daily',
         'route_samples',
         'route_waypoint_schedule',
         'route_summary',
@@ -1353,8 +1355,44 @@ def render_route_timing_controls(waypoints):
     return start_dt, end_dt, spacing_km, max_samples, anchor_times
 
 
-def make_route_plot(report, units):
+def add_route_night_shading(route_fig, route_daily, x_start, x_end):
+    if route_daily is None or route_daily.empty:
+        return
+    if not {'time', 'sunrise', 'sunset'}.issubset(route_daily.columns):
+        return
+
+    x_start = pd.Timestamp(x_start)
+    x_end = pd.Timestamp(x_end)
+    daily = route_daily.copy()
+    for column in ['time', 'sunrise', 'sunset']:
+        daily[column] = pd.to_datetime(daily[column])
+    daily = daily.sort_values('time')
+
+    previous_sunset = None
+    for _, row in daily.iterrows():
+        route_fig.add_vline(
+            x=row['time'], row='all', col=1, opacity=0.05, line=dict(color='rgb(100,100,100)')
+        )
+        if previous_sunset is not None:
+            shade_start = max(previous_sunset, x_start)
+            shade_end = min(row['sunrise'], x_end)
+            if shade_end <= shade_start:
+                previous_sunset = row['sunset']
+                continue
+            route_fig.add_vrect(
+                x0=shade_start,
+                x1=shade_end,
+                fillcolor='rgb(100,100,100)',
+                opacity=0.05,
+                line_width=0,
+            )
+        previous_sunset = row['sunset']
+
+
+def make_route_plot(report, units, route_daily=None):
     route_hourly = report.copy()
+    x_start = pd.to_datetime(route_hourly['time']).min()
+    x_end = pd.to_datetime(route_hourly['time']).max()
     precip_bins = route_precipitation_bins(route_hourly)
     if 'is_route_sample' in route_hourly.columns:
         route_samples = route_hourly[route_hourly['is_route_sample'].astype(bool)]
@@ -1521,6 +1559,7 @@ def make_route_plot(report, units):
     route_fig.add_vline(
         x=route_hourly['time'].iloc[0], row='all', col=1, opacity=0.5, line=dict(color='rgb(100,100,100)')
     )
+    add_route_night_shading(route_fig, route_daily, x_start, x_end)
     route_fig.update_layout(
         hovermode='x',
         hoverlabel=dict(bgcolor='rgba(255,255,255,0.5)'),
@@ -1530,7 +1569,7 @@ def make_route_plot(report, units):
         legend=dict(orientation='h', groupclick='toggleitem'),
     )
     for row in range(1, 7):
-        route_fig.update_xaxes(showticklabels=True, row=row, col=1)
+        route_fig.update_xaxes(showticklabels=True, range=[x_start, x_end], row=row, col=1)
     route_fig.update_yaxes(title_text='Elevation', ticksuffix='m', row=1, col=1, secondary_y=False)
     route_fig.update_yaxes(title_text='Temperature', ticksuffix=units.get('temperature_2m', ''), row=2, col=1, secondary_y=False)
     route_fig.update_yaxes(title_text='Relative Humidity %', ticksuffix=units.get('relative_humidity_2m', ''), range=[0, 100], row=3, col=1, secondary_y=False)
@@ -1654,13 +1693,15 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
         route_samples,
         st.session_state['route_forecasts'],
     )
-    route_fig = make_route_plot(report, units)
+    route_daily = route_sun_daily(st.session_state['route_forecasts'])
+    route_fig = make_route_plot(report, units, route_daily)
 
     total_distance = waypoint_distances[-1] if waypoint_distances else cumulative_route_distances(waypoints)[-1]
     route_duration = waypoint_etas[-1] - pd.Timestamp(start_dt)
 
     st.session_state['route_report'] = report
     st.session_state['route_units'] = units
+    st.session_state['route_daily'] = route_daily
     st.session_state['route_samples'] = route_samples
     st.session_state['route_fig'] = route_fig
     st.session_state['route_waypoint_schedule'] = pd.DataFrame(

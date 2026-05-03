@@ -34,6 +34,7 @@ from meteopy.RouteWeather.RouteWeather import (
     parse_openrouteservice_route,
     parse_route_forecast_response,
     route_forecast_days_needed,
+    route_sun_daily,
     sample_route,
 )
 
@@ -402,6 +403,11 @@ class RouteForecastParsingTests(unittest.TestCase):
                     "temperature_2m": [18.0],
                     "weather_code": [3],
                 },
+                "daily": {
+                    "time": ["2026-05-02", "2026-05-03"],
+                    "sunrise": ["2026-05-02T05:45", "2026-05-03T05:44"],
+                    "sunset": ["2026-05-02T19:30", "2026-05-03T19:31"],
+                },
             },
             {
                 "latitude": 33.2,
@@ -420,6 +426,25 @@ class RouteForecastParsingTests(unittest.TestCase):
         self.assertIn("weathercode", parsed[0]["hourly"].columns)
         self.assertEqual("wmo code", parsed[0]["hourly_units"]["weathercode"])
         self.assertEqual(2100.0, parsed[0]["elevation"])
+        self.assertEqual(pd.Timestamp("2026-05-02 05:45"), parsed[0]["daily"].loc[0, "sunrise"])
+
+    def test_route_sun_daily_uses_first_forecast_with_sun_data(self):
+        forecasts = [
+            {"daily": pd.DataFrame()},
+            {
+                "daily": pd.DataFrame(
+                    {
+                        "time": pd.to_datetime(["2026-05-02"]),
+                        "sunrise": pd.to_datetime(["2026-05-02 05:45"]),
+                        "sunset": pd.to_datetime(["2026-05-02 19:30"]),
+                    }
+                )
+            },
+        ]
+
+        daily = route_sun_daily(forecasts)
+
+        self.assertEqual(pd.Timestamp("2026-05-02 19:30"), daily.loc[0, "sunset"])
 
     def test_parse_open_meteo_error_raises_clear_error(self):
         with self.assertRaisesRegex(RouteWeatherError, "bad variable"):
@@ -461,6 +486,7 @@ class RouteForecastParsingTests(unittest.TestCase):
         self.assertEqual("-118.12346,-118.2", kwargs["params"]["longitude"])
         self.assertIn("temperature_2m", kwargs["params"]["hourly"])
         self.assertIn("weather_code", kwargs["params"]["hourly"])
+        self.assertEqual("sunrise,sunset", kwargs["params"]["daily"])
         self.assertEqual(3, kwargs["params"]["forecast_days"])
         self.assertEqual(9, kwargs["timeout"])
         self.assertEqual(2, len(forecasts))
