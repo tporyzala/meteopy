@@ -1,6 +1,8 @@
 from meteopy.RouteWeather.RouteWeather import (
     ROUTE_FORECAST_API_URL,
     ROUTE_HOURLY_VARIABLES,
+    OPENROUTESERVICE_DIRECTIONS_API_URL,
+    OPENROUTESERVICE_PROFILES,
     RouteWeatherError,
     attach_route_sample_etas,
     build_hourly_timeline,
@@ -10,7 +12,9 @@ from meteopy.RouteWeather.RouteWeather import (
     classify_route_hazards,
     cumulative_route_distances,
     fetch_route_forecasts,
+    fetch_openrouteservice_route,
     haversine_distance_km,
+    parse_openrouteservice_route,
     parse_route_forecast_response,
     route_forecast_days_needed,
     sample_route,

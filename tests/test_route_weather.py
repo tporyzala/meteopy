@@ -17,6 +17,7 @@ if "meteopy" not in sys.modules:
     sys.modules["meteopy"] = package
 
 from meteopy.RouteWeather.RouteWeather import (
+    OPENROUTESERVICE_DIRECTIONS_API_URL,
     ROUTE_FORECAST_API_URL,
     RouteWeatherError,
     attach_route_sample_etas,
@@ -26,9 +27,11 @@ from meteopy.RouteWeather.RouteWeather import (
     calculate_route_waypoint_times,
     classify_route_hazards,
     cumulative_route_distances,
+    fetch_openrouteservice_route,
     fetch_route_forecasts,
     haversine_distance_km,
     linear_interpolate_by_time,
+    parse_openrouteservice_route,
     parse_route_forecast_response,
     route_forecast_days_needed,
     sample_route,
@@ -79,6 +82,64 @@ class RouteGeometryTests(unittest.TestCase):
         self.assertGreaterEqual(len(samples), 3)
         self.assertAlmostEqual(0.0, samples[0]["lng"])
         self.assertAlmostEqual(1.0, samples[-1]["lng"])
+
+    def test_parse_openrouteservice_route_extracts_geometry_and_waypoint_distances(self):
+        payload = {
+            "features": [
+                {
+                    "geometry": {
+                        "coordinates": [
+                            [0.0, 0.0],
+                            [0.5, 0.0],
+                            [1.0, 0.0],
+                        ],
+                    },
+                    "properties": {
+                        "summary": {
+                            "distance": 111200,
+                            "duration": 3600,
+                        },
+                        "way_points": [0, 1, 2],
+                    },
+                }
+            ]
+        }
+
+        route = parse_openrouteservice_route(payload, waypoint_count=3)
+
+        self.assertEqual(3, len(route["geometry"]))
+        self.assertEqual({"lat": 0.0, "lng": 0.0}, route["geometry"][0])
+        self.assertEqual([0, 1, 2], route["waypoint_indices"])
+        self.assertEqual(111.2, route["distance_km"])
+        self.assertEqual(3600, route["duration_seconds"])
+        self.assertAlmostEqual(55.6, route["waypoint_distances_km"][1], places=1)
+
+    def test_parse_openrouteservice_route_falls_back_to_nearest_waypoint_indices(self):
+        payload = {
+            "features": [
+                {
+                    "geometry": {
+                        "coordinates": [
+                            [0.0, 0.0],
+                            [0.5, 0.0],
+                            [1.0, 0.0],
+                        ],
+                    },
+                    "properties": {},
+                }
+            ]
+        }
+
+        route = parse_openrouteservice_route(
+            payload,
+            waypoint_count=2,
+            waypoints=[
+                {"lat": 0.0, "lng": 0.1},
+                {"lat": 0.0, "lng": 0.9},
+            ],
+        )
+
+        self.assertEqual([0, 2], route["waypoint_indices"])
 
 
 class RouteTimingTests(unittest.TestCase):
@@ -148,6 +209,22 @@ class RouteTimingTests(unittest.TestCase):
         self.assertEqual(pd.Timestamp(datetime(2026, 5, 2, 11, 0)), etas[1])
         self.assertEqual(pd.Timestamp(datetime(2026, 5, 2, 12, 0)), etas[2])
 
+    def test_explicit_waypoint_times_can_use_snapped_route_distances(self):
+        waypoints = [
+            {"lat": 0, "lng": 0},
+            {"lat": 0, "lng": 0.5},
+            {"lat": 0, "lng": 1.0},
+        ]
+
+        etas = calculate_route_waypoint_times(
+            waypoints,
+            datetime(2026, 5, 2, 8, 0),
+            datetime(2026, 5, 2, 12, 0),
+            waypoint_distances=[0.0, 30.0, 120.0],
+        )
+
+        self.assertEqual(pd.Timestamp(datetime(2026, 5, 2, 9, 0)), etas[1])
+
     def test_explicit_waypoint_times_reject_out_of_order_anchors(self):
         with self.assertRaisesRegex(ValueError, "must increase"):
             calculate_route_waypoint_times(
@@ -186,6 +263,26 @@ class RouteTimingTests(unittest.TestCase):
         self.assertEqual(etas[0], attached[0]["eta"])
         self.assertEqual(etas[-1], attached[-1]["eta"])
         self.assertGreater(attached[1]["eta"], attached[0]["eta"])
+
+    def test_attach_route_sample_etas_can_use_snapped_route_distances(self):
+        samples = [
+            {"lat": 0.0, "lng": 0.0, "distance_km": 0.0},
+            {"lat": 0.0, "lng": 0.5, "distance_km": 30.0},
+            {"lat": 0.0, "lng": 1.0, "distance_km": 120.0},
+        ]
+        etas = [
+            pd.Timestamp(datetime(2026, 5, 2, 8, 0)),
+            pd.Timestamp(datetime(2026, 5, 2, 12, 0)),
+        ]
+
+        attached = attach_route_sample_etas(
+            samples,
+            [{"lat": 0, "lng": 0}, {"lat": 0, "lng": 1}],
+            etas,
+            waypoint_distances=[0.0, 120.0],
+        )
+
+        self.assertEqual(pd.Timestamp(datetime(2026, 5, 2, 9, 0)), attached[1]["eta"])
 
     def test_hourly_timeline_includes_start_hourly_ticks_and_end(self):
         timeline = build_hourly_timeline(
@@ -319,6 +416,64 @@ class RouteForecastParsingTests(unittest.TestCase):
         self.assertEqual(3, kwargs["params"]["forecast_days"])
         self.assertEqual(9, kwargs["timeout"])
         self.assertEqual(2, len(forecasts))
+
+    @patch("meteopy.RouteWeather.RouteWeather.requests.post")
+    def test_fetch_openrouteservice_route_uses_profile_key_and_coordinates(self, mock_post):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "features": [
+                {
+                    "geometry": {
+                        "coordinates": [
+                            [-118.0, 33.0],
+                            [-118.1, 33.1],
+                        ],
+                    },
+                    "properties": {
+                        "summary": {"distance": 15000},
+                        "way_points": [0, 1],
+                    },
+                }
+            ]
+        }
+        mock_post.return_value = response
+
+        route = fetch_openrouteservice_route(
+            [
+                {"lat": 33.0, "lng": -118.0},
+                {"lat": 33.1, "lng": -118.1},
+            ],
+            "foot-hiking",
+            "test-key",
+            timeout=8,
+        )
+
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        self.assertEqual(
+            (OPENROUTESERVICE_DIRECTIONS_API_URL.format(profile="foot-hiking"),),
+            args,
+        )
+        self.assertEqual(
+            [[-118.0, 33.0], [-118.1, 33.1]],
+            kwargs["json"]["coordinates"],
+        )
+        self.assertFalse(kwargs["json"]["instructions"])
+        self.assertEqual("test-key", kwargs["headers"]["Authorization"])
+        self.assertEqual(8, kwargs["timeout"])
+        self.assertEqual(15.0, route["distance_km"])
+
+    @patch("meteopy.RouteWeather.RouteWeather.requests.post")
+    def test_fetch_openrouteservice_route_wraps_request_errors(self, mock_post):
+        mock_post.side_effect = requests.Timeout("timed out")
+
+        with self.assertRaisesRegex(RouteWeatherError, "timed out"):
+            fetch_openrouteservice_route(
+                [{"lat": 33.0, "lng": -118.0}, {"lat": 33.1, "lng": -118.1}],
+                "driving-car",
+                "test-key",
+            )
 
     @patch("meteopy.RouteWeather.RouteWeather.requests.get")
     def test_fetch_route_forecasts_wraps_request_errors(self, mock_get):

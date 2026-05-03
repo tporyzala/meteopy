@@ -1,5 +1,6 @@
 
 import base64
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -29,6 +30,13 @@ SIDEBAR_GRAPHIC_PATH = Path(__file__).resolve().parent / 'assets' / 'weather-rou
 TOOL_OPTIONS = {
     'point': 'Point Forecast',
     'route': 'Route Weather',
+}
+ROUTE_PATH_OPTIONS = {
+    'Manual': None,
+    'Driving': 'driving-car',
+    'Walking': 'foot-walking',
+    'Hiking': 'foot-hiking',
+    'Cycling': 'cycling-regular',
 }
 
 HISTORICAL_VARIABLE_OPTIONS = {
@@ -919,6 +927,10 @@ def clear_route_forecast_cache():
         'route_sample_geometry',
         'route_forecasts',
         'route_forecast_signature',
+        'route_geometry',
+        'route_waypoint_distances_km',
+        'route_path_label',
+        'route_path_provider',
     ]:
         st.session_state.pop(key, None)
 
@@ -949,17 +961,56 @@ def handle_route_map_change():
     clear_route_forecast_cache()
 
 
+def route_path_provider_name(route_path_label):
+    return 'Manual' if ROUTE_PATH_OPTIONS.get(route_path_label) is None else 'OpenRouteService'
+
+
+def route_uses_openrouteservice(route_path_label):
+    return route_path_provider_name(route_path_label) == 'OpenRouteService'
+
+
+def clear_stale_route_path_cache(route_path_label):
+    cached_signature = st.session_state.get('route_forecast_signature')
+    if cached_signature and cached_signature.get('route_path') != route_path_label:
+        clear_route_forecast_cache()
+
+
 def build_route_feature_group(waypoints):
     route_features = folium.FeatureGroup(name='Route waypoints', overlay=True)
     if len(waypoints) >= 2:
         route_locations = [[point['lat'], point['lng']] for point in waypoints]
-        folium.PolyLine(
-            locations=route_locations,
-            color='firebrick',
-            weight=4,
-            opacity=0.85,
-            tooltip='Route',
-        ).add_to(route_features)
+        route_geometry = st.session_state.get('route_geometry')
+        route_path_label = st.session_state.get('route_path_label', 'Manual')
+        has_openrouteservice_route = (
+            route_geometry
+            and len(route_geometry) >= 2
+            and st.session_state.get('route_path_provider') == 'OpenRouteService'
+            and route_uses_openrouteservice(route_path_label)
+        )
+        if has_openrouteservice_route:
+            folium.PolyLine(
+                locations=[[point['lat'], point['lng']] for point in route_geometry],
+                color='firebrick',
+                weight=5,
+                opacity=0.9,
+                tooltip=f"OpenRouteService {route_path_label} route",
+            ).add_to(route_features)
+            folium.PolyLine(
+                locations=route_locations,
+                color='#64748b',
+                weight=2,
+                opacity=0.45,
+                dash_array='6,8',
+                tooltip='Selected waypoint control line',
+            ).add_to(route_features)
+        else:
+            folium.PolyLine(
+                locations=route_locations,
+                color='firebrick',
+                weight=4,
+                opacity=0.85,
+                tooltip='Manual waypoint route',
+            ).add_to(route_features)
 
     for index, waypoint in enumerate(waypoints, start=1):
         folium.Marker(
@@ -971,7 +1022,40 @@ def build_route_feature_group(waypoints):
     return route_features
 
 
-def render_route_map(waypoints):
+def render_route_path_status(route_path_label, waypoints):
+    cached_label = st.session_state.get('route_path_label')
+    cached_provider = st.session_state.get('route_path_provider')
+    has_route_geometry = bool(st.session_state.get('route_geometry'))
+
+    if (
+        route_uses_openrouteservice(route_path_label)
+        and has_route_geometry
+        and cached_label == route_path_label
+        and cached_provider == 'OpenRouteService'
+    ):
+        st.markdown(
+            f"""
+            <div style="font-size:0.9rem; color:#334155; line-height:1.5;">
+              <span style="display:inline-block; width:34px; border-top:5px solid firebrick; margin:0 8px 4px 0;"></span>
+              OpenRouteService {route_path_label} route
+              <span style="display:inline-block; width:34px; border-top:2px dashed #64748b; margin:0 8px 4px 20px;"></span>
+              selected waypoint line
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    elif route_uses_openrouteservice(route_path_label):
+        st.caption(
+            f"OpenRouteService {route_path_label} selected. Fetch Route Weather to draw the snapped path; "
+            "until then the map shows your selected waypoint segments."
+        )
+    elif len(waypoints) >= 2:
+        st.caption('Manual route: solid red line follows the selected waypoint segments.')
+    else:
+        st.caption('Add at least two waypoints to draw a route.')
+
+
+def render_route_map(waypoints, route_path_label):
     route_map = create_weather_map(DEFAULT_MAP_CENTER, include_lat_lng_popup=False)
 
     with st.container(height=430):
@@ -984,6 +1068,7 @@ def render_route_map(waypoints):
             feature_group_to_add=build_route_feature_group(waypoints),
             on_change=handle_route_map_change,
         )
+    render_route_path_status(route_path_label, waypoints)
     st.caption('Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
 
 
@@ -1042,6 +1127,56 @@ def route_end_default(waypoints, start_dt):
             mp.cumulative_route_distances(waypoints)[-1] / 5.0,
         )
     return (pd.Timestamp(start_dt) + pd.Timedelta(hours=duration_hours)).to_pydatetime()
+
+
+def configured_openrouteservice_api_key():
+    env_key = os.environ.get('OPENROUTESERVICE_API_KEY')
+    if env_key:
+        return env_key
+
+    try:
+        return st.secrets.get('OPENROUTESERVICE_API_KEY')
+    except Exception:
+        return None
+
+
+def render_route_path_controls():
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        route_path_label = st.selectbox(
+            'Route path',
+            options=list(ROUTE_PATH_OPTIONS.keys()),
+            index=0,
+            key='route_path_label_select',
+            help='Manual uses straight waypoint segments. Other modes snap the route with OpenRouteService when you fetch.',
+        )
+
+    profile = ROUTE_PATH_OPTIONS[route_path_label]
+    api_key = None
+    with col2:
+        if profile is None:
+            st.caption('Manual route: weather samples follow straight lines between waypoints.')
+        else:
+            configured_key = configured_openrouteservice_api_key()
+            if configured_key:
+                api_key = configured_key
+                st.caption('Using OpenRouteService API key from environment or Streamlit secrets.')
+            else:
+                api_key = st.text_input(
+                    'OpenRouteService API key',
+                    type='password',
+                    key='route_openrouteservice_api_key',
+                    help='Used only when Fetch Route Weather is clicked.',
+                )
+
+    return route_path_label, profile, api_key
+
+
+def active_route_waypoint_distances(waypoints):
+    distances = st.session_state.get('route_waypoint_distances_km')
+    if distances and len(distances) == len(waypoints):
+        return distances
+    return None
 
 
 def collect_route_anchor_times_from_state(waypoints):
@@ -1117,6 +1252,7 @@ def render_route_timing_controls(waypoints):
     end_dt = datetime.combine(route_end_date, route_end_time)
 
     anchor_times = collect_route_anchor_times_from_state(waypoints)
+    waypoint_distances = active_route_waypoint_distances(waypoints)
     if len(waypoints) >= 3:
         try:
             estimated_etas = mp.calculate_route_waypoint_times(
@@ -1124,6 +1260,7 @@ def render_route_timing_controls(waypoints):
                 start_dt,
                 end_dt,
                 anchor_times,
+                waypoint_distances=waypoint_distances,
             )
         except ValueError:
             estimated_etas = [pd.Timestamp(start_dt)] * len(waypoints)
@@ -1238,7 +1375,7 @@ def format_route_report_table(report):
     )
 
 
-def route_forecast_signature(waypoints, spacing_km, max_samples):
+def route_forecast_signature(waypoints, spacing_km, max_samples, route_path_label):
     return {
         'waypoints': [
             (round(waypoint['lat'], 6), round(waypoint['lng'], 6))
@@ -1246,7 +1383,30 @@ def route_forecast_signature(waypoints, spacing_km, max_samples):
         ],
         'spacing_km': float(spacing_km),
         'max_samples': int(max_samples),
+        'route_path': route_path_label,
     }
+
+
+def resolve_route_path(waypoints, route_path_label, route_profile, openrouteservice_api_key):
+    if route_profile is None:
+        return {
+            'geometry': [
+                {'lat': waypoint['lat'], 'lng': waypoint['lng']}
+                for waypoint in waypoints
+            ],
+            'waypoint_distances_km': mp.cumulative_route_distances(waypoints),
+            'distance_km': mp.cumulative_route_distances(waypoints)[-1],
+            'duration_seconds': None,
+        }
+
+    if not openrouteservice_api_key:
+        raise ValueError('OpenRouteService API key is required for snapped route paths.')
+
+    return mp.fetch_openrouteservice_route(
+        waypoints,
+        route_profile,
+        openrouteservice_api_key,
+    )
 
 
 def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
@@ -1256,16 +1416,19 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
     if 'route_sample_geometry' not in st.session_state or 'route_forecasts' not in st.session_state:
         raise ValueError('Fetch route weather before adjusting route timing.')
 
+    waypoint_distances = st.session_state.get('route_waypoint_distances_km')
     waypoint_etas = mp.calculate_route_waypoint_times(
         waypoints,
         start_dt,
         end_dt,
         anchor_times,
+        waypoint_distances=waypoint_distances,
     )
     route_samples = mp.attach_route_sample_etas(
         st.session_state['route_sample_geometry'],
         waypoints,
         waypoint_etas,
+        waypoint_distances=waypoint_distances,
     )
     report, units = mp.build_route_hourly_report(
         route_samples,
@@ -1273,7 +1436,7 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
     )
     route_fig = make_route_plot(report, units)
 
-    total_distance = mp.cumulative_route_distances(waypoints)[-1]
+    total_distance = waypoint_distances[-1] if waypoint_distances else mp.cumulative_route_distances(waypoints)[-1]
     route_duration = waypoint_etas[-1] - pd.Timestamp(start_dt)
 
     st.session_state['route_report'] = report
@@ -1293,24 +1456,46 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
         'duration_hours': route_duration.total_seconds() / 3600,
         'sample_count': len(route_samples),
         'finish_time': waypoint_etas[-1],
+        'path_label': st.session_state.get('route_path_label', 'Manual'),
+        'path_provider': st.session_state.get('route_path_provider', 'Manual'),
     }
 
 
-def fetch_and_store_route_weather(waypoints, start_dt, end_dt, spacing_km, max_samples, anchor_times):
+def fetch_and_store_route_weather(
+    waypoints,
+    start_dt,
+    end_dt,
+    spacing_km,
+    max_samples,
+    anchor_times,
+    route_path_label,
+    route_profile,
+    openrouteservice_api_key,
+):
     if len(waypoints) < 2:
         raise ValueError('Add at least two route waypoints before fetching route weather.')
 
     if pd.Timestamp(start_dt) < pd.Timestamp.now() - pd.Timedelta(hours=1):
         raise ValueError('Route start time must be in the current forecast window.')
 
+    route_path = resolve_route_path(
+        waypoints,
+        route_path_label,
+        route_profile,
+        openrouteservice_api_key,
+    )
+    route_geometry = route_path['geometry']
+    waypoint_distances = route_path['waypoint_distances_km']
+
     waypoint_etas = mp.calculate_route_waypoint_times(
         waypoints,
         start_dt,
         end_dt,
         anchor_times,
+        waypoint_distances=waypoint_distances,
     )
     route_sample_geometry = mp.sample_route(
-        waypoints,
+        route_geometry,
         spacing_km=spacing_km,
         max_samples=max_samples,
     )
@@ -1319,21 +1504,26 @@ def fetch_and_store_route_weather(waypoints, start_dt, end_dt, spacing_km, max_s
 
     st.session_state['route_sample_geometry'] = route_sample_geometry
     st.session_state['route_forecasts'] = forecasts
+    st.session_state['route_geometry'] = route_geometry
+    st.session_state['route_waypoint_distances_km'] = waypoint_distances
+    st.session_state['route_path_label'] = route_path_label
+    st.session_state['route_path_provider'] = route_path_provider_name(route_path_label)
     st.session_state['route_forecast_signature'] = route_forecast_signature(
         waypoints,
         spacing_km,
         max_samples,
+        route_path_label,
     )
     store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times)
 
 
-def sync_cached_route_report(waypoints, start_dt, end_dt, spacing_km, max_samples, anchor_times):
+def sync_cached_route_report(waypoints, start_dt, end_dt, spacing_km, max_samples, anchor_times, route_path_label):
     if 'route_forecasts' not in st.session_state:
         return
 
-    current_signature = route_forecast_signature(waypoints, spacing_km, max_samples)
+    current_signature = route_forecast_signature(waypoints, spacing_km, max_samples, route_path_label)
     if st.session_state.get('route_forecast_signature') != current_signature:
-        clear_route_results()
+        clear_route_forecast_cache()
         st.info('Route geometry or sample settings changed. Fetch Route Weather again for this route.')
         return
 
@@ -1349,6 +1539,13 @@ def render_route_results():
         return
 
     summary = st.session_state['route_summary']
+    path_provider = summary.get('path_provider', 'Manual')
+    path_label = summary.get('path_label', 'Manual')
+    if path_provider == 'OpenRouteService':
+        st.caption(f"Route path: OpenRouteService {path_label}. Weather samples follow the red snapped route on the map.")
+    else:
+        st.caption('Route path: Manual waypoint segments.')
+
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric('Distance', f"{summary['distance_km']:.1f} km")
@@ -1380,7 +1577,9 @@ def render_route_weather_tool():
     st.session_state.setdefault('route_waypoints', [])
     waypoints = st.session_state['route_waypoints']
 
-    render_route_map(waypoints)
+    route_path_label, route_profile, openrouteservice_api_key = render_route_path_controls()
+    clear_stale_route_path_cache(route_path_label)
+    render_route_map(waypoints, route_path_label)
     render_route_waypoint_controls(waypoints)
     start_dt, end_dt, spacing_km, max_samples, anchor_times = render_route_timing_controls(waypoints)
 
@@ -1399,7 +1598,11 @@ def render_route_weather_tool():
                 spacing_km,
                 max_samples,
                 anchor_times,
+                route_path_label,
+                route_profile,
+                openrouteservice_api_key,
             )
+            st.rerun()
         except (RuntimeError, ValueError, mp.RouteWeatherError) as e:
             clear_route_results()
             st.error(f"Route weather could not be fetched: {e}")
@@ -1411,6 +1614,7 @@ def render_route_weather_tool():
             spacing_km,
             max_samples,
             anchor_times,
+            route_path_label,
         )
 
     render_route_results()

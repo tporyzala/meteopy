@@ -7,6 +7,16 @@ import requests
 
 
 ROUTE_FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast"
+OPENROUTESERVICE_DIRECTIONS_API_URL = (
+    "https://api.openrouteservice.org/v2/directions/{profile}/geojson"
+)
+
+OPENROUTESERVICE_PROFILES = {
+    "driving-car",
+    "foot-walking",
+    "foot-hiking",
+    "cycling-regular",
+}
 
 ROUTE_HOURLY_VARIABLES = [
     "temperature_2m",
@@ -252,6 +262,7 @@ def calculate_route_waypoint_times(
     start_time,
     end_time,
     anchor_times=None,
+    waypoint_distances=None,
 ):
     if not waypoints:
         return []
@@ -290,7 +301,13 @@ def calculate_route_waypoint_times(
     known_indices = sorted(known_times)
     previous_index = known_indices[0]
     previous_time = known_times[previous_index]
-    cumulative_distances = cumulative_route_distances(waypoints)
+    cumulative_distances = (
+        list(waypoint_distances)
+        if waypoint_distances is not None
+        else cumulative_route_distances(waypoints)
+    )
+    if len(cumulative_distances) != len(waypoints):
+        raise ValueError("Route waypoint distance count must match waypoint count")
 
     for index in known_indices[1:]:
         anchor_time = known_times[index]
@@ -352,8 +369,12 @@ def _interpolate_times_by_distance(target_distances, source_distances, source_ti
     return interpolated
 
 
-def attach_route_sample_etas(samples, waypoints, waypoint_etas):
-    waypoint_distances = cumulative_route_distances(waypoints)
+def attach_route_sample_etas(samples, waypoints, waypoint_etas, waypoint_distances=None):
+    waypoint_distances = (
+        list(waypoint_distances)
+        if waypoint_distances is not None
+        else cumulative_route_distances(waypoints)
+    )
     sample_distances = [sample["distance_km"] for sample in samples]
     sample_etas = _interpolate_times_by_distance(
         sample_distances,
@@ -438,6 +459,165 @@ def linear_interpolate_by_time(rows, timeline, numeric_columns=None, nearest_col
         result[column] = nearest_values
 
     return result
+
+
+def _route_error_reason(response):
+    if response is None:
+        return None
+
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            return error.get("message") or error.get("code")
+        if body.get("message"):
+            return body.get("message")
+        if body.get("reason"):
+            return body.get("reason")
+
+    return None
+
+
+def _clamp_route_index(index, route_geometry):
+    return min(max(int(index), 0), max(0, len(route_geometry) - 1))
+
+
+def _nearest_route_indices(route_geometry, waypoints):
+    indices = []
+    start_index = 0
+    for waypoint in waypoints:
+        if start_index >= len(route_geometry):
+            indices.append(len(route_geometry) - 1)
+            continue
+
+        nearest_index = min(
+            range(start_index, len(route_geometry)),
+            key=lambda index: haversine_distance_km(route_geometry[index], waypoint),
+        )
+        indices.append(nearest_index)
+        start_index = nearest_index
+    return indices
+
+
+def _fallback_route_indices(route_geometry, waypoint_count):
+    if waypoint_count <= 1:
+        return [0] if route_geometry else []
+
+    last_index = max(0, len(route_geometry) - 1)
+    return [
+        round(last_index * index / (waypoint_count - 1))
+        for index in range(waypoint_count)
+    ]
+
+
+def parse_openrouteservice_route(payload, waypoint_count=None, waypoints=None):
+    if not isinstance(payload, dict):
+        raise RouteWeatherError("OpenRouteService returned invalid route data")
+
+    features = payload.get("features")
+    if not isinstance(features, list) or not features:
+        raise RouteWeatherError("OpenRouteService returned no route")
+
+    feature = features[0]
+    geometry = feature.get("geometry", {}) if isinstance(feature, dict) else {}
+    coordinates = geometry.get("coordinates")
+    if not isinstance(coordinates, list) or len(coordinates) < 2:
+        raise RouteWeatherError("OpenRouteService route is missing geometry")
+
+    route_geometry = [
+        {
+            "lat": float(coordinate[1]),
+            "lng": float(coordinate[0]),
+        }
+        for coordinate in coordinates
+        if isinstance(coordinate, (list, tuple)) and len(coordinate) >= 2
+    ]
+    if len(route_geometry) < 2:
+        raise RouteWeatherError("OpenRouteService route geometry is too short")
+
+    properties = feature.get("properties", {})
+    summary = properties.get("summary", {}) if isinstance(properties, dict) else {}
+    cumulative_distances = cumulative_route_distances(route_geometry)
+
+    raw_waypoint_indices = properties.get("way_points") if isinstance(properties, dict) else None
+    if isinstance(raw_waypoint_indices, list) and waypoint_count and len(raw_waypoint_indices) == waypoint_count:
+        waypoint_indices = [
+            _clamp_route_index(index, route_geometry)
+            for index in raw_waypoint_indices
+        ]
+    elif waypoints:
+        waypoint_indices = _nearest_route_indices(route_geometry, waypoints)
+    elif waypoint_count:
+        waypoint_indices = _fallback_route_indices(route_geometry, waypoint_count)
+    else:
+        waypoint_indices = [0, len(route_geometry) - 1]
+
+    waypoint_distances = [
+        cumulative_distances[_clamp_route_index(index, route_geometry)]
+        for index in waypoint_indices
+    ]
+
+    return {
+        "geometry": route_geometry,
+        "waypoint_indices": waypoint_indices,
+        "waypoint_distances_km": waypoint_distances,
+        "distance_km": float(summary.get("distance", cumulative_distances[-1] * 1000)) / 1000,
+        "duration_seconds": summary.get("duration"),
+    }
+
+
+def fetch_openrouteservice_route(waypoints, profile, api_key, timeout=20):
+    if len(waypoints) < 2:
+        raise RouteWeatherError("OpenRouteService routing requires at least two waypoints")
+    if profile not in OPENROUTESERVICE_PROFILES:
+        raise RouteWeatherError(f"Unsupported OpenRouteService profile: {profile}")
+    if not api_key:
+        raise RouteWeatherError("OpenRouteService API key is required for snapped routing")
+
+    coordinates = [
+        [float(_lat_lng(waypoint)[1]), float(_lat_lng(waypoint)[0])]
+        for waypoint in waypoints
+    ]
+    headers = {
+        "Authorization": api_key,
+        "Accept": "application/json, application/geo+json",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "coordinates": coordinates,
+        "instructions": False,
+    }
+
+    try:
+        response = requests.post(
+            OPENROUTESERVICE_DIRECTIONS_API_URL.format(profile=profile),
+            json=body,
+            headers=headers,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        reason = _route_error_reason(exc.response)
+        if reason is None:
+            reason = str(exc)
+        raise RouteWeatherError(f"OpenRouteService routing failed: {reason}") from exc
+    except requests.RequestException as exc:
+        raise RouteWeatherError(f"OpenRouteService routing failed: {exc}") from exc
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise RouteWeatherError("OpenRouteService returned invalid JSON") from exc
+
+    return parse_openrouteservice_route(
+        payload,
+        waypoint_count=len(waypoints),
+        waypoints=waypoints,
+    )
 
 
 def _response_error_reason(response):
