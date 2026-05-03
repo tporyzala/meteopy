@@ -256,13 +256,6 @@ def make_forecast_plot(df, aq=None):
     )
 
     f_fig.add_trace(
-        go.Scatter(
-            x=df_hourly['time'], y=df_hourly['weathercode'], name='WCO', legendgroup='2',
-        ),
-        secondary_y=False, row=3, col=1,
-    )
-
-    f_fig.add_trace(
         go.Bar(
             x=df_hourly['time'], y=df_hourly['rain'], name='Rain', legendgroup='3',
         ),
@@ -1437,13 +1430,6 @@ def make_route_plot(report, units):
         ),
         secondary_y=True, row=4, col=1,
     )
-    route_fig.add_trace(
-        go.Scatter(
-            x=route_hourly['time'], y=route_hourly['weathercode'], name='WCO', legendgroup='2',
-        ),
-        secondary_y=False, row=4, col=1,
-    )
-
     route_fig.add_trace(
         go.Bar(
             x=precip_bins['time'],
