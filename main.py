@@ -154,6 +154,33 @@ def moving_average(data, window):
     )
 
 
+def route_precipitation_bins(route_hourly):
+    precip_columns = ['rain', 'showers', 'snowfall']
+    if route_hourly.empty or 'time' not in route_hourly.columns:
+        return pd.DataFrame(columns=['time', *precip_columns])
+
+    precip = route_hourly.copy()
+    for column in precip_columns:
+        if column not in precip.columns:
+            precip[column] = 0.0
+
+    precip = precip[['time', *precip_columns]].copy()
+    precip['time'] = pd.to_datetime(precip['time'])
+    precip = (
+        precip
+        .sort_values('time')
+        .drop_duplicates('time', keep='last')
+        .set_index('time')
+    )
+    bins = precip.resample('1h', label='left', closed='left').mean().dropna(how='all')
+    if bins.empty:
+        return pd.DataFrame(columns=['time', *precip_columns])
+
+    bins = bins.reset_index()
+    bins['time'] = bins['time'] + pd.Timedelta(minutes=30)
+    return bins
+
+
 def make_forecast_plot(df, aq=None):
     # Subplots (forecast)
 
@@ -1324,6 +1351,7 @@ def render_route_timing_controls(waypoints):
 
 def make_route_plot(report, units):
     route_hourly = report.copy()
+    precip_bins = route_precipitation_bins(route_hourly)
     if 'is_route_sample' in route_hourly.columns:
         route_samples = route_hourly[route_hourly['is_route_sample'].astype(bool)]
     else:
@@ -1418,19 +1446,34 @@ def make_route_plot(report, units):
 
     route_fig.add_trace(
         go.Bar(
-            x=route_hourly['time'], y=route_hourly['rain'], name='Rain', legendgroup='3',
+            x=precip_bins['time'],
+            y=precip_bins['rain'],
+            width=60 * 60 * 1000,
+            name='Rain',
+            legendgroup='3',
+            hovertemplate='Rain %{y:.2f} mm<br>1h bin centered %{x}<extra></extra>',
         ),
         secondary_y=False, row=5, col=1,
     )
     route_fig.add_trace(
         go.Bar(
-            x=route_hourly['time'], y=route_hourly['showers'], name='Shower', legendgroup='3',
+            x=precip_bins['time'],
+            y=precip_bins['showers'],
+            width=60 * 60 * 1000,
+            name='Shower',
+            legendgroup='3',
+            hovertemplate='Showers %{y:.2f} mm<br>1h bin centered %{x}<extra></extra>',
         ),
         secondary_y=False, row=5, col=1,
     )
     route_fig.add_trace(
         go.Bar(
-            x=route_hourly['time'], y=route_hourly['snowfall'] * 10, name='Snow', legendgroup='3',
+            x=precip_bins['time'],
+            y=precip_bins['snowfall'] * 10,
+            width=60 * 60 * 1000,
+            name='Snow',
+            legendgroup='3',
+            hovertemplate='Snow %{y:.2f} mm water equiv. x10<br>1h bin centered %{x}<extra></extra>',
         ),
         secondary_y=False, row=5, col=1,
     )
