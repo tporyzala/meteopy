@@ -1,5 +1,7 @@
 
+import base64
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import streamlit as st
 import folium
@@ -23,6 +25,11 @@ st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 debug = False
 DEFAULT_MAP_CENTER = [33.76634, -118.16699]
 DEFAULT_MAP_ZOOM = 12
+SIDEBAR_GRAPHIC_PATH = Path(__file__).resolve().parent / 'assets' / 'weather-route-mark.svg'
+TOOL_OPTIONS = {
+    'point': 'Point Forecast',
+    'route': 'Route Weather',
+}
 
 HISTORICAL_VARIABLE_OPTIONS = {
     'Weather Code': 'weather_code',
@@ -1409,13 +1416,106 @@ def render_route_weather_tool():
     render_route_results()
 
 
-tool_mode = st.sidebar.radio(
-    'Tool',
-    ['Point Forecast', 'Route Weather'],
-    index=0,
-)
+def sidebar_graphic_data_uri():
+    try:
+        encoded = base64.b64encode(SIDEBAR_GRAPHIC_PATH.read_bytes()).decode('ascii')
+    except OSError:
+        return ''
+    return f"data:image/svg+xml;base64,{encoded}"
 
-if tool_mode == 'Route Weather':
+
+def selected_tool_key():
+    tool_key = st.query_params.get('tool', 'point')
+    if isinstance(tool_key, list):
+        tool_key = tool_key[0] if tool_key else 'point'
+    if tool_key not in TOOL_OPTIONS:
+        return 'point'
+    return tool_key
+
+
+def render_sidebar_navigation(active_tool_key):
+    graphic_uri = sidebar_graphic_data_uri()
+    graphic_html = (
+        f'<img class="tool-sidebar-graphic" src="{graphic_uri}" alt="" />'
+        if graphic_uri
+        else '<div class="tool-sidebar-graphic-fallback"></div>'
+    )
+    point_active = 'active' if active_tool_key == 'point' else ''
+    route_active = 'active' if active_tool_key == 'route' else ''
+
+    st.sidebar.markdown(
+        f"""
+        <style>
+            [data-testid="stSidebar"] .tool-sidebar-brand {{
+                display: flex;
+                align-items: center;
+                gap: 0.7rem;
+                margin: 0.2rem 0 1.2rem;
+            }}
+            [data-testid="stSidebar"] .tool-sidebar-graphic {{
+                width: 86px;
+                height: auto;
+                border-radius: 16px;
+                box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+            }}
+            [data-testid="stSidebar"] .tool-sidebar-graphic-fallback {{
+                width: 86px;
+                height: 58px;
+                border-radius: 16px;
+                background: linear-gradient(135deg, #e0f2fe, #fef3c7);
+                box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+            }}
+            [data-testid="stSidebar"] .tool-sidebar-title {{
+                color: #0f172a;
+                font-size: 1.05rem;
+                font-weight: 700;
+                line-height: 1.15;
+            }}
+            [data-testid="stSidebar"] .tool-sidebar-nav {{
+                display: flex;
+                flex-direction: column;
+                gap: 0.15rem;
+                margin-top: 0.35rem;
+            }}
+            [data-testid="stSidebar"] .tool-sidebar-link {{
+                color: #334155;
+                display: block;
+                font-size: 1rem;
+                font-weight: 600;
+                line-height: 1.2;
+                padding: 0.62rem 0.7rem;
+                border-radius: 8px;
+                text-decoration: none;
+                border-left: 3px solid transparent;
+            }}
+            [data-testid="stSidebar"] .tool-sidebar-link:hover {{
+                color: #0f172a;
+                background: rgba(14, 165, 233, 0.09);
+                text-decoration: none;
+            }}
+            [data-testid="stSidebar"] .tool-sidebar-link.active {{
+                color: #0f172a;
+                background: rgba(15, 23, 42, 0.06);
+                border-left-color: #ef4444;
+            }}
+        </style>
+        <div class="tool-sidebar-brand">
+            {graphic_html}
+            <div class="tool-sidebar-title">Meteopy</div>
+        </div>
+        <nav class="tool-sidebar-nav" aria-label="Weather tools">
+            <a class="tool-sidebar-link {point_active}" href="?tool=point" target="_self">Point Forecast</a>
+            <a class="tool-sidebar-link {route_active}" href="?tool=route" target="_self">Route Weather</a>
+        </nav>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+tool_key = selected_tool_key()
+render_sidebar_navigation(tool_key)
+
+if tool_key == 'route':
     render_route_weather_tool()
 else:
     render_point_forecast_tool()
