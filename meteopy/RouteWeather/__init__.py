@@ -1,4 +1,5 @@
 from meteopy.RouteWeather.RouteWeather import (
+    ROUTE_DAILY_VARIABLES,
     ROUTE_FORECAST_API_URL,
     ROUTE_HOURLY_VARIABLES,
     OPENROUTESERVICE_DIRECTIONS_API_URL,
@@ -17,5 +18,6 @@ from meteopy.RouteWeather.RouteWeather import (
     parse_openrouteservice_route,
     parse_route_forecast_response,
     route_forecast_days_needed,
+    route_sun_daily,
     sample_route,
 )
