@@ -38,7 +38,8 @@ st.set_page_config(layout='wide', page_title='Point Weather Forecasting')
 debug = False
 DEFAULT_MAP_CENTER = [33.76634, -118.16699]
 DEFAULT_MAP_ZOOM = 12
-SIDEBAR_GRAPHIC_PATH = Path(__file__).resolve().parent / 'assets' / 'weather-route-mark.svg'
+SIDEBAR_GRAPHIC_PATH = Path(__file__).resolve(
+).parent / 'assets' / 'weather-route-mark.svg'
 TOOL_OPTIONS = {
     'point': 'Point Forecast',
     'route': 'Route Weather',
@@ -184,7 +185,8 @@ def route_precipitation_bins(route_hourly):
         .drop_duplicates('time', keep='last')
         .set_index('time')
     )
-    bins = precip.resample('1h', label='left', closed='left').mean().dropna(how='all')
+    bins = precip.resample(
+        '1h', label='left', closed='left').mean().dropna(how='all')
     if bins.empty:
         return pd.DataFrame(columns=['time', *precip_columns])
 
@@ -683,7 +685,8 @@ def make_historical_plot(historical, variables, start_month=1):
         )
 
     daily['time'] = pd.to_datetime(daily['time'])
-    daily['season'] = daily['time'].apply(lambda t: t.year if t.month >= start_month else t.year - 1)
+    daily['season'] = daily['time'].apply(
+        lambda t: t.year if t.month >= start_month else t.year - 1)
 
     def season_plot_time(t):
         base = t.replace(year=2000)
@@ -715,7 +718,8 @@ def make_historical_plot(historical, variables, start_month=1):
             if 'sum' in variable:
                 year_data[variable] = year_data[variable].cumsum()
 
-            season_label = f"{season}-{season + 1}" if start_month != 1 else str(season)
+            season_label = f"{season}-{season + 1}" if start_month != 1 else str(
+                season)
             is_current = season == current_season
             h_fig.add_trace(
                 go.Scatter(
@@ -723,7 +727,8 @@ def make_historical_plot(historical, variables, start_month=1):
                     y=year_data[variable],
                     mode='lines',
                     name=season_label,
-                    line=dict(color='firebrick' if is_current else 'lightgray', width=3 if is_current else 1),
+                    line=dict(
+                        color='firebrick' if is_current else 'lightgray', width=3 if is_current else 1),
                     opacity=1.0 if is_current else 0.4,
                 ),
                 row=row,
@@ -798,7 +803,8 @@ def create_weather_map(location=None, zoom_start=DEFAULT_MAP_ZOOM, include_radar
 def render_point_forecast_tool():
     render_header('Point Weather Forecasting')
 
-    selected_location = st.session_state.get('selected_location', DEFAULT_MAP_CENTER)
+    selected_location = st.session_state.get(
+        'selected_location', DEFAULT_MAP_CENTER)
     weather_map = create_weather_map(DEFAULT_MAP_CENTER)
 
     cont1 = st.container(height=400)
@@ -810,7 +816,8 @@ def render_point_forecast_tool():
             key='weather_map',
             returned_objects=['last_clicked'],
         )
-    st.caption('Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
+    st.caption(
+        'Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
 
     if st_data.get('last_clicked') is not None:
         selected_location = [
@@ -819,9 +826,11 @@ def render_point_forecast_tool():
         ]
         st.session_state['selected_location'] = selected_location
     else:
-        selected_location = st.session_state.get('selected_location', DEFAULT_MAP_CENTER)
+        selected_location = st.session_state.get(
+            'selected_location', DEFAULT_MAP_CENTER)
 
-    selected_location = st.session_state.get('selected_location', DEFAULT_MAP_CENTER)
+    selected_location = st.session_state.get(
+        'selected_location', DEFAULT_MAP_CENTER)
     latitude = selected_location[0]
     longitude = selected_location[1]
 
@@ -835,11 +844,14 @@ def render_point_forecast_tool():
 
     with col3:
         try:
-            elevation_data = fetch_elevation(round(latitude, 4), round(longitude, 4))
-            elevation = elevation_data.get('elevation', [None])[0] if 'elevation' in elevation_data else None
+            elevation_data = fetch_elevation(
+                round(latitude, 4), round(longitude, 4))
+            elevation = elevation_data.get('elevation', [None])[
+                0] if 'elevation' in elevation_data else None
             if elevation is not None:
                 elevation_ft = elevation * 3.28084
-                st.metric(label='Elevation', value=f"{elevation:.1f} m / {elevation_ft:.1f} ft")
+                st.metric(label='Elevation',
+                          value=f"{elevation:.1f} m / {elevation_ft:.1f} ft")
         except Exception as e:
             st.metric(label='Elevation', value='Error')
             if debug:
@@ -882,13 +894,17 @@ def render_point_forecast_tool():
                 else:
                     st.info('Ensemble is ready after you click Fetch Forecast!')
             elif tab_name == 'Historical':
-                years_back = st.slider('Years back', min_value=1, max_value=50, value=50, step=1)
+                years_back = st.slider(
+                    'Years back', min_value=1, max_value=50, value=50, step=1)
 
-                start_month = st.slider('Start month', min_value=1, max_value=12, value=1, step=1)
+                start_month = st.slider(
+                    'Start month', min_value=1, max_value=12, value=1, step=1)
 
-                default_labels = ['Temperature Max', 'Temperature Min', 'Precipitation Sum']
+                default_labels = ['Temperature Max',
+                                  'Temperature Min', 'Precipitation Sum']
                 if 'historical_vars' in st.session_state:
-                    default_labels = [label for label, var in HISTORICAL_VARIABLE_OPTIONS.items() if var in st.session_state['historical_vars']]
+                    default_labels = [label for label, var in HISTORICAL_VARIABLE_OPTIONS.items(
+                    ) if var in st.session_state['historical_vars']]
 
                 selected_labels = st.multiselect(
                     label='Historical outputs',
@@ -897,7 +913,8 @@ def render_point_forecast_tool():
                     key='historical_outputs',
                 )
 
-                selected_vars = [HISTORICAL_VARIABLE_OPTIONS[label] for label in selected_labels]
+                selected_vars = [HISTORICAL_VARIABLE_OPTIONS[label]
+                                 for label in selected_labels]
 
                 if st.button(
                     label='Fetch Historical Weather',
@@ -906,17 +923,21 @@ def render_point_forecast_tool():
                     key='fetch_historical_button',
                 ):
                     if not selected_vars:
-                        st.warning('Please select at least one historical output before fetching.')
+                        st.warning(
+                            'Please select at least one historical output before fetching.')
                     else:
                         try:
-                            hist = fetch_historical(latitude, longitude, selected_vars, years_back)
-                            h_fig = make_historical_plot(hist, selected_vars, start_month)
+                            hist = fetch_historical(
+                                latitude, longitude, selected_vars, years_back)
+                            h_fig = make_historical_plot(
+                                hist, selected_vars, start_month)
 
                             st.session_state['historical'] = hist
                             st.session_state['h_fig'] = h_fig
                             st.session_state['historical_vars'] = selected_vars
                         except (RuntimeError, ValueError) as e:
-                            st.error(f"Historical data could not be fetched: {e}")
+                            st.error(
+                                f"Historical data could not be fetched: {e}")
 
                 can_plot_historical = (
                     'historical' in st.session_state
@@ -929,13 +950,16 @@ def render_point_forecast_tool():
 
                 if can_plot_historical:
                     try:
-                        st.session_state['h_fig'] = make_historical_plot(st.session_state['historical'], selected_vars, start_month)
+                        st.session_state['h_fig'] = make_historical_plot(
+                            st.session_state['historical'], selected_vars, start_month)
                     except ValueError as e:
                         can_plot_historical = False
                         st.session_state.pop('h_fig', None)
-                        st.error(f"Historical chart could not be rendered: {e}")
+                        st.error(
+                            f"Historical chart could not be rendered: {e}")
                 elif 'historical' in st.session_state and selected_vars:
-                    st.info('Fetch historical weather to update the chart for the selected outputs.')
+                    st.info(
+                        'Fetch historical weather to update the chart for the selected outputs.')
 
                 if can_plot_historical and 'h_fig' in st.session_state:
                     st.plotly_chart(st.session_state['h_fig'], width='stretch')
@@ -1022,7 +1046,8 @@ def build_route_feature_group(waypoints):
         )
         if has_openrouteservice_route:
             folium.PolyLine(
-                locations=[[point['lat'], point['lng']] for point in route_geometry],
+                locations=[[point['lat'], point['lng']]
+                           for point in route_geometry],
                 color='firebrick',
                 weight=5,
                 opacity=0.9,
@@ -1083,13 +1108,15 @@ def render_route_path_status(route_path_label, waypoints):
             "until then the map shows your selected waypoint segments."
         )
     elif len(waypoints) >= 2:
-        st.caption('Manual route: solid red line follows the selected waypoint segments.')
+        st.caption(
+            'Manual route: solid red line follows the selected waypoint segments.')
     else:
         st.caption('Add at least two waypoints to draw a route.')
 
 
 def render_route_map(waypoints, route_path_label):
-    route_map = create_weather_map(DEFAULT_MAP_CENTER, include_lat_lng_popup=False)
+    route_map = create_weather_map(
+        DEFAULT_MAP_CENTER, include_lat_lng_popup=False)
 
     with st.container(height=430):
         st_folium(
@@ -1102,7 +1129,8 @@ def render_route_map(waypoints, route_path_label):
             on_change=handle_route_map_change,
         )
     render_route_path_status(route_path_label, waypoints)
-    st.caption('Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
+    st.caption(
+        'Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
 
 
 def render_route_waypoint_controls(waypoints):
@@ -1126,7 +1154,8 @@ def render_route_waypoint_controls(waypoints):
                 {'lat': waypoint['lat'], 'lng': waypoint['lng']}
                 for waypoint in reversed(waypoints[:-1])
             ]
-            st.session_state.setdefault('route_waypoints', []).extend(mirrored_waypoints)
+            st.session_state.setdefault(
+                'route_waypoints', []).extend(mirrored_waypoints)
             st.session_state.pop('route_last_click_token', None)
             clear_route_forecast_cache()
             st.rerun()
@@ -1188,12 +1217,14 @@ def render_route_path_controls():
     api_key = None
     with col2:
         if profile is None:
-            st.caption('Manual route: weather samples follow straight lines between waypoints.')
+            st.caption(
+                'Manual route: weather samples follow straight lines between waypoints.')
         else:
             configured_key = configured_openrouteservice_api_key()
             if configured_key:
                 api_key = configured_key
-                st.caption('Using OpenRouteService API key from environment or Streamlit secrets.')
+                st.caption(
+                    'Using OpenRouteService API key from environment or Streamlit secrets.')
             else:
                 api_key = st.text_input(
                     'OpenRouteService API key',
@@ -1310,12 +1341,13 @@ def render_route_timing_controls(waypoints):
         max_samples = st.slider(
             'Max sample points',
             min_value=5,
-            max_value=80,
+            max_value=300,
             value=40,
             step=5,
             key='route_max_samples',
         )
-        st.caption('Caps automatic spacing samples. Selected waypoints are always included in addition to this cap.')
+        st.caption(
+            'Caps automatic spacing samples. Selected waypoints are always included in addition to this cap.')
 
     start_dt = datetime.combine(route_start_date, route_start_time)
     end_dt = datetime.combine(route_end_date, route_end_time)
@@ -1335,7 +1367,8 @@ def render_route_timing_controls(waypoints):
             estimated_etas = [pd.Timestamp(start_dt)] * len(waypoints)
 
         with st.expander('Waypoint arrival anchors', expanded=True):
-            st.caption('Start and end use the route times above. Add optional times only for interior waypoints where your pace changes.')
+            st.caption(
+                'Start and end use the route times above. Add optional times only for interior waypoints where your pace changes.')
             for index, waypoint in enumerate(waypoints):
                 if index == 0:
                     st.write(f"Waypoint 1: {start_dt:%Y-%m-%d %H:%M}")
@@ -1381,10 +1414,12 @@ def render_route_timing_controls(waypoints):
                             disabled=True,
                         )
                 if enabled:
-                    anchor_times[index] = datetime.combine(anchor_date, anchor_time)
+                    anchor_times[index] = datetime.combine(
+                        anchor_date, anchor_time)
 
     elif len(waypoints) >= 2:
-        st.caption('Waypoint 1 uses the start time and the final waypoint uses the end time.')
+        st.caption(
+            'Waypoint 1 uses the start time and the final waypoint uses the end time.')
 
     return start_dt, end_dt, spacing_km, max_samples, anchor_times
 
@@ -1429,7 +1464,8 @@ def make_route_plot(report, units, route_daily=None):
     x_end = pd.to_datetime(route_hourly['time']).max()
     precip_bins = route_precipitation_bins(route_hourly)
     if 'is_route_sample' in route_hourly.columns:
-        route_samples = route_hourly[route_hourly['is_route_sample'].astype(bool)]
+        route_samples = route_hourly[route_hourly['is_route_sample'].astype(
+            bool)]
     else:
         route_samples = route_hourly.iloc[0:0]
 
@@ -1563,10 +1599,12 @@ def make_route_plot(report, units, route_daily=None):
     marker_specs = [
         ('elevation', 1, False, 'Elevation sample', 'saddlebrown'),
         ('temperature_2m', 2, False, 'Temperature sample', 'firebrick'),
-        ('apparent_temperature', 2, False, 'Feels-like sample', 'rgba(178,34,34,0.55)'),
+        ('apparent_temperature', 2, False,
+         'Feels-like sample', 'rgba(178,34,34,0.55)'),
         ('dew_point_2m', 2, False, 'Dewpoint sample', 'forestgreen'),
         ('relative_humidity_2m', 3, False, 'Humidity sample', 'darkblue'),
-        ('precipitation_probability', 4, False, 'Precip. % sample', 'rgba(74,144,164,0.9)'),
+        ('precipitation_probability', 4, False,
+         'Precip. % sample', 'rgba(74,144,164,0.9)'),
         ('cloud_cover', 4, False, 'Cloud sample', 'rgba(80,80,80,0.65)'),
         ('surface_pressure', 4, True, 'Pressure sample', 'black'),
         ('wind_speed_10m', 6, False, 'Wind sample', 'royalblue'),
@@ -1580,7 +1618,8 @@ def make_route_plot(report, units, route_daily=None):
                 x=route_samples['time'],
                 y=route_samples[column],
                 mode='markers',
-                marker=dict(color=color, size=4, symbol='circle', opacity=0.75),
+                marker=dict(color=color, size=4,
+                            symbol='circle', opacity=0.75),
                 name=name,
                 legendgroup='route_samples',
                 showlegend=False,
@@ -1603,22 +1642,33 @@ def make_route_plot(report, units, route_daily=None):
         legend=dict(orientation='h', groupclick='toggleitem'),
     )
     for row in range(1, 7):
-        route_fig.update_xaxes(showticklabels=True, range=[x_start, x_end], row=row, col=1)
-    route_fig.update_yaxes(title_text='Elevation', ticksuffix='m', row=1, col=1, secondary_y=False)
-    route_fig.update_yaxes(title_text='Temperature', ticksuffix=units.get('temperature_2m', ''), row=2, col=1, secondary_y=False)
-    route_fig.update_yaxes(title_text='Relative Humidity %', ticksuffix=units.get('relative_humidity_2m', ''), range=[0, 100], row=3, col=1, secondary_y=False)
-    route_fig.update_yaxes(title_text='Precipitation &</br></br> Cloud Cover %', ticksuffix=units.get('precipitation_probability', ''), range=[0, 100], row=4, col=1, secondary_y=False)
-    route_fig.update_yaxes(title_text='Pressure', ticksuffix=units.get('surface_pressure', ''), rangemode='nonnegative', row=4, col=1, secondary_y=True)
-    route_fig.update_yaxes(title_text='Precipitation', ticksuffix=units.get('precipitation', units.get('rain', '')), rangemode='nonnegative', row=5, col=1, secondary_y=False)
-    route_fig.update_yaxes(showgrid=False, showticklabels=False, row=5, col=1, secondary_y=True)
-    route_fig.update_yaxes(title_text='Wind Speed', ticksuffix=units.get('wind_speed_10m', ''), rangemode='nonnegative', row=6, col=1, secondary_y=False)
-    route_fig.update_yaxes(showgrid=False, showticklabels=False, row=6, col=1, secondary_y=True)
+        route_fig.update_xaxes(showticklabels=True, range=[
+                               x_start, x_end], row=row, col=1)
+    route_fig.update_yaxes(title_text='Elevation',
+                           ticksuffix='m', row=1, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Temperature', ticksuffix=units.get(
+        'temperature_2m', ''), row=2, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Relative Humidity %', ticksuffix=units.get(
+        'relative_humidity_2m', ''), range=[0, 100], row=3, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Precipitation &</br></br> Cloud Cover %', ticksuffix=units.get(
+        'precipitation_probability', ''), range=[0, 100], row=4, col=1, secondary_y=False)
+    route_fig.update_yaxes(title_text='Pressure', ticksuffix=units.get(
+        'surface_pressure', ''), rangemode='nonnegative', row=4, col=1, secondary_y=True)
+    route_fig.update_yaxes(title_text='Precipitation', ticksuffix=units.get(
+        'precipitation', units.get('rain', '')), rangemode='nonnegative', row=5, col=1, secondary_y=False)
+    route_fig.update_yaxes(
+        showgrid=False, showticklabels=False, row=5, col=1, secondary_y=True)
+    route_fig.update_yaxes(title_text='Wind Speed', ticksuffix=units.get(
+        'wind_speed_10m', ''), rangemode='nonnegative', row=6, col=1, secondary_y=False)
+    route_fig.update_yaxes(
+        showgrid=False, showticklabels=False, row=6, col=1, secondary_y=True)
     return route_fig
 
 
 def format_route_report_table(report):
     table = report.copy()
-    table['time'] = pd.to_datetime(table['time']).dt.strftime('%Y-%m-%d %H:%M:%S')
+    table['time'] = pd.to_datetime(
+        table['time']).dt.strftime('%Y-%m-%d %H:%M:%S')
     columns = [
         'time',
         'is_route_sample',
@@ -1641,7 +1691,8 @@ def format_route_report_table(report):
     ]
     table = table[[column for column in columns if column in table.columns]]
     if 'is_route_sample' in table.columns:
-        table['is_route_sample'] = table['is_route_sample'].map(lambda value: 'Yes' if value else '')
+        table['is_route_sample'] = table['is_route_sample'].map(
+            lambda value: 'Yes' if value else '')
     for column in table.select_dtypes(include='number').columns:
         table[column] = table[column].round(2)
     return table.rename(
@@ -1693,7 +1744,8 @@ def resolve_route_path(waypoints, route_path_label, route_profile, openrouteserv
         }
 
     if not openrouteservice_api_key:
-        raise ValueError('OpenRouteService API key is required for snapped route paths.')
+        raise ValueError(
+            'OpenRouteService API key is required for snapped route paths.')
 
     return fetch_openrouteservice_route(
         waypoints,
@@ -1704,7 +1756,8 @@ def resolve_route_path(waypoints, route_path_label, route_profile, openrouteserv
 
 def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
     if len(waypoints) < 2:
-        raise ValueError('Add at least two route waypoints before building a route report.')
+        raise ValueError(
+            'Add at least two route waypoints before building a route report.')
 
     if 'route_sample_geometry' not in st.session_state or 'route_forecasts' not in st.session_state:
         raise ValueError('Fetch route weather before adjusting route timing.')
@@ -1730,7 +1783,8 @@ def store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times):
     route_daily = route_sun_daily(st.session_state['route_forecasts'])
     route_fig = make_route_plot(report, units, route_daily)
 
-    total_distance = waypoint_distances[-1] if waypoint_distances else cumulative_route_distances(waypoints)[-1]
+    total_distance = waypoint_distances[-1] if waypoint_distances else cumulative_route_distances(
+        waypoints)[-1]
     route_duration = waypoint_etas[-1] - pd.Timestamp(start_dt)
 
     st.session_state['route_report'] = report
@@ -1769,10 +1823,12 @@ def fetch_and_store_route_weather(
     openrouteservice_api_key,
 ):
     if len(waypoints) < 2:
-        raise ValueError('Add at least two route waypoints before fetching route weather.')
+        raise ValueError(
+            'Add at least two route waypoints before fetching route weather.')
 
     if pd.Timestamp(start_dt) < pd.Timestamp.now() - pd.Timedelta(hours=1):
-        raise ValueError('Route start time must be in the current forecast window.')
+        raise ValueError(
+            'Route start time must be in the current forecast window.')
 
     route_path = resolve_route_path(
         waypoints,
@@ -1798,14 +1854,16 @@ def fetch_and_store_route_weather(
         forced_distances=waypoint_distances,
     )
     forecast_days = route_forecast_days_needed(waypoint_etas[-1])
-    forecasts = fetch_route_forecasts(route_sample_geometry, forecast_days=forecast_days)
+    forecasts = fetch_route_forecasts(
+        route_sample_geometry, forecast_days=forecast_days)
 
     st.session_state['route_sample_geometry'] = route_sample_geometry
     st.session_state['route_forecasts'] = forecasts
     st.session_state['route_geometry'] = route_geometry
     st.session_state['route_waypoint_distances_km'] = waypoint_distances
     st.session_state['route_path_label'] = route_path_label
-    st.session_state['route_path_provider'] = route_path_provider_name(route_path_label)
+    st.session_state['route_path_provider'] = route_path_provider_name(
+        route_path_label)
     st.session_state['route_forecast_signature'] = route_forecast_signature(
         waypoints,
         spacing_km,
@@ -1819,14 +1877,17 @@ def sync_cached_route_report(waypoints, start_dt, end_dt, spacing_km, max_sample
     if 'route_forecasts' not in st.session_state:
         return
 
-    current_signature = route_forecast_signature(waypoints, spacing_km, max_samples, route_path_label)
+    current_signature = route_forecast_signature(
+        waypoints, spacing_km, max_samples, route_path_label)
     if st.session_state.get('route_forecast_signature') != current_signature:
         clear_route_forecast_cache()
-        st.info('Route geometry or sample settings changed. Fetch Route Weather again for this route.')
+        st.info(
+            'Route geometry or sample settings changed. Fetch Route Weather again for this route.')
         return
 
     try:
-        store_route_report_from_cache(waypoints, start_dt, end_dt, anchor_times)
+        store_route_report_from_cache(
+            waypoints, start_dt, end_dt, anchor_times)
     except (ValueError, RouteWeatherError) as e:
         clear_route_results()
         st.warning(f"Route timing could not be re-interpolated: {e}")
@@ -1840,7 +1901,8 @@ def render_route_results():
     path_provider = summary.get('path_provider', 'Manual')
     path_label = summary.get('path_label', 'Manual')
     if path_provider == 'OpenRouteService':
-        st.caption(f"Route path: OpenRouteService {path_label}. Weather samples follow the red snapped route on the map.")
+        st.caption(
+            f"Route path: OpenRouteService {path_label}. Weather samples follow the red snapped route on the map.")
     else:
         st.caption('Route path: Manual waypoint segments.')
 
@@ -1852,16 +1914,20 @@ def render_route_results():
     with col3:
         st.metric('Samples', summary['sample_count'])
     with col4:
-        st.metric('Finish', pd.Timestamp(summary['finish_time']).strftime('%Y-%m-%d %H:%M'))
+        st.metric('Finish', pd.Timestamp(
+            summary['finish_time']).strftime('%Y-%m-%d %H:%M'))
 
     st.plotly_chart(st.session_state['route_fig'], width='stretch')
 
     if 'route_waypoint_schedule' in st.session_state:
         waypoint_schedule = st.session_state['route_waypoint_schedule'].copy()
-        waypoint_schedule['ETA'] = pd.to_datetime(waypoint_schedule['ETA']).dt.strftime('%Y-%m-%d %H:%M')
-        waypoint_schedule[['Latitude', 'Longitude']] = waypoint_schedule[['Latitude', 'Longitude']].round(5)
+        waypoint_schedule['ETA'] = pd.to_datetime(
+            waypoint_schedule['ETA']).dt.strftime('%Y-%m-%d %H:%M')
+        waypoint_schedule[['Latitude', 'Longitude']] = waypoint_schedule[[
+            'Latitude', 'Longitude']].round(5)
         if 'Distance km' in waypoint_schedule.columns:
-            waypoint_schedule['Distance km'] = waypoint_schedule['Distance km'].round(2)
+            waypoint_schedule['Distance km'] = waypoint_schedule['Distance km'].round(
+                2)
         st.dataframe(waypoint_schedule, width='stretch', hide_index=True)
 
     st.dataframe(
@@ -1881,7 +1947,8 @@ def render_route_weather_tool():
     clear_stale_route_path_cache(route_path_label)
     render_route_map(waypoints, route_path_label)
     render_route_waypoint_controls(waypoints)
-    start_dt, end_dt, spacing_km, max_samples, anchor_times = render_route_timing_controls(waypoints)
+    start_dt, end_dt, spacing_km, max_samples, anchor_times = render_route_timing_controls(
+        waypoints)
 
     if st.button(
         'Fetch Route Weather',
@@ -1922,7 +1989,8 @@ def render_route_weather_tool():
 
 def sidebar_graphic_data_uri():
     try:
-        encoded = base64.b64encode(SIDEBAR_GRAPHIC_PATH.read_bytes()).decode('ascii')
+        encoded = base64.b64encode(
+            SIDEBAR_GRAPHIC_PATH.read_bytes()).decode('ascii')
     except OSError:
         return ''
     return f"data:image/svg+xml;base64,{encoded}"
