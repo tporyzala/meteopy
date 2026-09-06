@@ -19,7 +19,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.figure_factory as ff
 from math import radians, isclose
-from streamlit_extras.buy_me_a_coffee import button
 from meteopy.RouteWeather.RouteWeather import (
     RouteWeatherError,
     attach_route_sample_etas,
@@ -405,8 +404,8 @@ def make_forecast_plot(df, aq=None):
         'yaxis6': {
             'anchor': 'x3',
             'rangemode': 'nonnegative',
-            'ticksuffix': hourly_units.get('surface_pressure', ''),
-            'title': 'Pressure',
+            'showgrid': False,
+            'showticklabels': False,
         },
         'yaxis7': {
             'anchor': 'x4',
@@ -767,14 +766,10 @@ def make_historical_plot(historical, variables, start_month=1):
 
 
 def render_header(title):
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.title(title)
-    with col2:
-        button(username="tporyzala", floating=False, width=221)
+    st.title(title)
 
 
-def create_weather_map(location=None, zoom_start=DEFAULT_MAP_ZOOM, include_radar=True, include_lat_lng_popup=True):
+def create_weather_map(location=None, zoom_start=DEFAULT_MAP_ZOOM, include_radar=True):
     tiles = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
     attr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
     weather_map = folium.Map(
@@ -792,12 +787,34 @@ def create_weather_map(location=None, zoom_start=DEFAULT_MAP_ZOOM, include_radar
         except mp.RainViewerError as e:
             st.warning(f"Radar overlay unavailable: {e}")
 
-    if include_lat_lng_popup:
-        folium.LatLngPopup().add_to(weather_map)
     folium.plugins.Geocoder().add_to(weather_map)
     folium.plugins.LocateControl().add_to(weather_map)
     folium.plugins.MousePosition().add_to(weather_map)
     return weather_map
+
+
+def create_location_marker(location):
+    marker_group = folium.FeatureGroup(name='Selected location')
+    folium.CircleMarker(
+        location=location,
+        radius=5,
+        color='#dc2626',
+        weight=2,
+        fill=True,
+        fill_color='#dc2626',
+        fill_opacity=1,
+    ).add_to(marker_group)
+    return marker_group
+
+
+def store_point_forecast_location():
+    map_data = st.session_state.get('weather_map', {})
+    clicked_location = map_data.get('last_clicked')
+    if clicked_location is not None:
+        st.session_state['selected_location'] = [
+            clicked_location['lat'],
+            clicked_location['lng'],
+        ]
 
 
 def render_point_forecast_tool():
@@ -806,28 +823,21 @@ def render_point_forecast_tool():
     selected_location = st.session_state.get(
         'selected_location', DEFAULT_MAP_CENTER)
     weather_map = create_weather_map(DEFAULT_MAP_CENTER)
+    location_marker = create_location_marker(selected_location)
 
     cont1 = st.container(height=400)
     with cont1:
-        st_data = st_folium(
+        st_folium(
             weather_map,
             width='stretch',
             height=340,
             key='weather_map',
             returned_objects=['last_clicked'],
+            feature_group_to_add=location_marker,
+            on_change=store_point_forecast_location,
         )
     st.caption(
         'Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
-
-    if st_data.get('last_clicked') is not None:
-        selected_location = [
-            st_data['last_clicked']['lat'],
-            st_data['last_clicked']['lng'],
-        ]
-        st.session_state['selected_location'] = selected_location
-    else:
-        selected_location = st.session_state.get(
-            'selected_location', DEFAULT_MAP_CENTER)
 
     selected_location = st.session_state.get(
         'selected_location', DEFAULT_MAP_CENTER)
@@ -1153,8 +1163,7 @@ def render_route_path_status(route_path_label, waypoints):
 
 
 def render_route_map(waypoints, route_path_label):
-    route_map = create_weather_map(
-        DEFAULT_MAP_CENTER, include_lat_lng_popup=False)
+    route_map = create_weather_map(DEFAULT_MAP_CENTER)
 
     with st.container(height=430):
         st_folium(
@@ -1690,8 +1699,9 @@ def make_route_plot(report, units, route_daily=None):
         'relative_humidity_2m', ''), range=[0, 100], row=3, col=1, secondary_y=False)
     route_fig.update_yaxes(title_text='Precipitation &</br></br> Cloud Cover %', ticksuffix=units.get(
         'precipitation_probability', ''), range=[0, 100], row=4, col=1, secondary_y=False)
-    route_fig.update_yaxes(title_text='Pressure', ticksuffix=units.get(
-        'surface_pressure', ''), rangemode='nonnegative', row=4, col=1, secondary_y=True)
+    route_fig.update_yaxes(
+        rangemode='nonnegative', showgrid=False, showticklabels=False,
+        row=4, col=1, secondary_y=True)
     route_fig.update_yaxes(title_text='Precipitation', ticksuffix=units.get(
         'precipitation', units.get('rain', '')), rangemode='nonnegative', row=5, col=1, secondary_y=False)
     route_fig.update_yaxes(

@@ -4,7 +4,6 @@ pandas
 numpy
 pydeck
 plotly
-streamlit_extras
 requests
 pytz
 streamlit
