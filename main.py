@@ -39,6 +39,11 @@ DEFAULT_MAP_CENTER = [33.76634, -118.16699]
 DEFAULT_MAP_ZOOM = 12
 SIDEBAR_GRAPHIC_PATH = Path(__file__).resolve(
 ).parent / 'assets' / 'weather-route-mark.svg'
+WEATHER_ICON_DIR = Path(__file__).resolve().parent / 'assets' / 'weather'
+FORECAST_PLOT_MARGIN_LEFT = 72
+FORECAST_PLOT_MARGIN_RIGHT = 24
+FORECAST_PLOT_DOMAIN_WIDTH_PERCENT = 94
+LOCATION_MARKER_PANE = 'selected-location-marker'
 TOOL_OPTIONS = {
     'point': 'Point Forecast',
     'route': 'Route Weather',
@@ -192,6 +197,209 @@ def route_precipitation_bins(route_hourly):
     bins = bins.reset_index()
     bins['time'] = bins['time'] + pd.Timedelta(minutes=30)
     return bins
+
+
+def daily_weather_symbol(weather_code, wind_speed=None, wind_gust=None, wind_unit='km/h'):
+    try:
+        code = int(round(float(weather_code)))
+    except (TypeError, ValueError):
+        code = None
+
+    def numeric_or_zero(value):
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return 0.0 if pd.isna(numeric) else numeric
+
+    wind_thresholds = {
+        'km/h': (40, 55),
+        'mph': (25, 35),
+        'm/s': (11, 15),
+        'kn': (22, 30),
+    }
+    wind_limit, gust_limit = wind_thresholds.get(wind_unit, wind_thresholds['km/h'])
+    is_windy = (
+        numeric_or_zero(wind_speed) >= wind_limit
+        or numeric_or_zero(wind_gust) >= gust_limit
+    )
+
+    if code in {95, 96, 99}:
+        return 'storm', 'Thunderstorms'
+    if code in {71, 73, 75, 77, 85, 86}:
+        return 'snow', 'Snow'
+    if code in {51, 53, 55, 56, 57}:
+        return 'rain', 'Drizzle'
+    if code in {61, 63, 65, 66, 67}:
+        return 'rain', 'Rain'
+    if code in {80, 81, 82}:
+        return 'rain', 'Showers'
+    if is_windy:
+        return 'windy', 'Windy'
+    if code in {45, 48}:
+        return 'fog', 'Fog'
+    if code == 0:
+        return 'sunny', 'Sunny'
+    if code in {1, 2}:
+        return 'partly-cloudy', 'Partly cloudy'
+    if code == 3:
+        return 'cloudy', 'Cloudy'
+    return 'cloudy', 'Conditions unavailable'
+
+
+def daily_forecast_range(daily):
+    if daily is None or daily.empty or 'time' not in daily.columns:
+        return None
+    days = pd.to_datetime(daily['time'], errors='coerce').dropna()
+    if days.empty:
+        return None
+    return [days.min().normalize(), days.max().normalize() + pd.Timedelta(days=1)]
+
+
+def weather_icon_data_uri(icon_name):
+    icon_bytes = (WEATHER_ICON_DIR / f'{icon_name}.svg').read_bytes()
+    encoded = base64.b64encode(icon_bytes).decode('ascii')
+    return f'data:image/svg+xml;base64,{encoded}'
+
+
+def daily_weather_card_html(date, icon_uri, description, temperatures=''):
+    return (
+        '<div class="daily-weather-card">'
+        '<div class="daily-weather-date">'
+        f'<span class="daily-weather-weekday">{date:%a}</span>'
+        f'<span class="daily-weather-calendar"> {date.month:02d}/{date.day:02d}</span>'
+        '</div>'
+        f'<img class="daily-weather-icon" src="{icon_uri}" alt="{description}">'
+        f'<div class="daily-weather-description">{description}</div>'
+        f'{temperatures}'
+        '</div>'
+    )
+
+
+def render_daily_forecast_strip(forecast):
+    daily = forecast.get('daily')
+    if daily is None or daily.empty or 'time' not in daily.columns:
+        return
+
+    daily_units = forecast.get('daily_units', {})
+    temperature_unit = daily_units.get('temperature_2m_max', '')
+    wind_unit = daily_units.get(
+        'windspeed_10m_max', daily_units.get('wind_speed_10m_max', 'km/h'))
+    cards = []
+
+    for _, day in daily.iterrows():
+        date = pd.to_datetime(day.get('time'), errors='coerce')
+        if pd.isna(date):
+            continue
+
+        weather_code = day.get('weathercode', day.get('weather_code'))
+        wind_speed = day.get('windspeed_10m_max', day.get('wind_speed_10m_max'))
+        wind_gust = day.get('windgusts_10m_max', day.get('wind_gusts_10m_max'))
+        icon_name, description = daily_weather_symbol(
+            weather_code, wind_speed, wind_gust, wind_unit)
+
+        high = day.get('temperature_2m_max')
+        low = day.get('temperature_2m_min')
+        temperatures = ''
+        if not pd.isna(high) and not pd.isna(low):
+            temperatures = (
+                f'<div class="daily-weather-temperatures">'
+                f'<span class="daily-weather-temperature-value">'
+                f'{float(high):.0f}{temperature_unit}</span>'
+                f'<span class="daily-weather-temperature-separator"> / </span>'
+                f'<span class="daily-weather-temperature-value">'
+                f'{float(low):.0f}{temperature_unit}</span>'
+                f'</div>'
+            )
+
+        cards.append(daily_weather_card_html(
+            date,
+            weather_icon_data_uri(icon_name),
+            description,
+            temperatures,
+        ))
+
+    if not cards:
+        return
+
+    st.html(
+        f'''<style>
+            .daily-weather-frame {{
+                box-sizing: border-box;
+                padding-left: {FORECAST_PLOT_MARGIN_LEFT}px;
+                padding-right: {FORECAST_PLOT_MARGIN_RIGHT}px;
+                margin: 0.35rem 0;
+            }}
+            .daily-weather-strip {{
+                display: grid;
+                grid-template-columns: repeat({len(cards)}, minmax(0, 1fr));
+                width: {FORECAST_PLOT_DOMAIN_WIDTH_PERCENT}%;
+                height: 118px;
+                border: 1px solid rgba(148, 163, 184, 0.45);
+                border-radius: 0.35rem 0.35rem 0 0;
+                overflow: hidden;
+                background: rgba(248, 250, 252, 0.86);
+            }}
+            .daily-weather-card {{
+                box-sizing: border-box;
+                height: 100%;
+                min-width: 0;
+                padding: 0.4rem 0.15rem 0.45rem;
+                text-align: center;
+                border-right: 1px solid rgba(148, 163, 184, 0.35);
+            }}
+            .daily-weather-card:last-child {{ border-right: 0; }}
+            .daily-weather-date {{
+                color: #334155;
+                font-size: 0.72rem;
+                font-weight: 650;
+                white-space: nowrap;
+            }}
+            .daily-weather-icon {{
+                display: block;
+                width: 38px;
+                height: 38px;
+                margin: 0.25rem auto 0.12rem;
+            }}
+            .daily-weather-description {{
+                min-height: 2em;
+                color: #334155;
+                font-size: 0.68rem;
+                line-height: 1;
+            }}
+            .daily-weather-temperatures {{
+                margin-top: 0.2rem;
+                color: #64748b;
+                font-size: 0.65rem;
+                white-space: nowrap;
+            }}
+            @media (max-width: 640px) {{
+                .daily-weather-frame {{ margin-top: 0.2rem; }}
+                .daily-weather-strip {{ height: 72px; }}
+                .daily-weather-card {{ padding: 0.28rem 0.04rem 0.3rem; }}
+                .daily-weather-date {{ font-size: 0.55rem; }}
+                .daily-weather-calendar,
+                .daily-weather-description {{ display: none; }}
+                .daily-weather-icon {{
+                    width: min(24px, 80%);
+                    height: 24px;
+                    margin: 0.12rem auto 0.05rem;
+                }}
+                .daily-weather-temperatures {{
+                    display: block;
+                    margin-top: 0.08rem;
+                    font-size: 0.44rem;
+                    line-height: 1.05;
+                    white-space: normal;
+                }}
+                .daily-weather-temperature-value {{ display: block; }}
+                .daily-weather-temperature-separator {{ display: none; }}
+            }}
+        </style>
+<div class="daily-weather-frame">
+<div class="daily-weather-strip">{''.join(cards)}</div>
+</div>''',
+    )
 
 
 def make_forecast_plot(df, aq=None):
@@ -359,6 +567,12 @@ def make_forecast_plot(df, aq=None):
         'legend_tracegroupgap': 90,
         'height': 1300,
         'barmode': 'stack',
+        'margin': dict(
+            l=FORECAST_PLOT_MARGIN_LEFT,
+            r=FORECAST_PLOT_MARGIN_RIGHT,
+            t=16,
+            b=40,
+        ),
         'xaxis': {
             'anchor': 'y',
             'matches': 'x2',
@@ -442,6 +656,9 @@ def make_forecast_plot(df, aq=None):
         ),
     }
     f_fig.update_layout(**layout)
+    plot_range = daily_forecast_range(df_daily)
+    if plot_range is not None:
+        f_fig.update_xaxes(range=plot_range)
     return f_fig
 
 
@@ -576,6 +793,12 @@ def make_ensemble_plot(de, df):
         'legend_tracegroupgap': 90,
         'height': 1300,
         'barmode': 'stack',
+        'margin': dict(
+            l=FORECAST_PLOT_MARGIN_LEFT,
+            r=FORECAST_PLOT_MARGIN_RIGHT,
+            t=16,
+            b=40,
+        ),
         'xaxis': {
             'anchor': 'y',
             'matches': 'x2',
@@ -667,6 +890,9 @@ def make_ensemble_plot(de, df):
         ),
     }
     e_fig.update_layout(**layout)
+    plot_range = daily_forecast_range(df_daily)
+    if plot_range is not None:
+        e_fig.update_xaxes(range=plot_range)
     return e_fig
 
 
@@ -779,6 +1005,11 @@ def create_weather_map(location=None, zoom_start=DEFAULT_MAP_ZOOM, include_radar
         attr=attr,
         attribution_control=False,
     )
+    folium.map.CustomPane(
+        LOCATION_MARKER_PANE,
+        z_index=675,
+        pointer_events=False,
+    ).add_to(weather_map)
 
     if include_radar:
         try:
@@ -795,7 +1026,7 @@ def create_weather_map(location=None, zoom_start=DEFAULT_MAP_ZOOM, include_radar
 
 def create_location_marker(location):
     marker_group = folium.FeatureGroup(name='Selected location')
-    folium.CircleMarker(
+    marker = folium.CircleMarker(
         location=location,
         radius=5,
         color='#dc2626',
@@ -803,7 +1034,9 @@ def create_location_marker(location):
         fill=True,
         fill_color='#dc2626',
         fill_opacity=1,
-    ).add_to(marker_group)
+    )
+    marker.options['pane'] = LOCATION_MARKER_PANE
+    marker.add_to(marker_group)
     return marker_group
 
 
@@ -836,9 +1069,6 @@ def render_point_forecast_tool():
             feature_group_to_add=location_marker,
             on_change=store_point_forecast_location,
         )
-    st.caption(
-        'Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
-
     selected_location = st.session_state.get(
         'selected_location', DEFAULT_MAP_CENTER)
     latitude = selected_location[0]
@@ -858,74 +1088,95 @@ def render_point_forecast_tool():
         if debug:
             st.error(f"Elevation fetch error: {e}")
 
-    summary_col, action_col = st.columns(
-        [3, 1], vertical_alignment='center')
-    with summary_col:
-        st.markdown(
-            f"""
-            <style>
-                .location-summary-table {{
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin: 0.1rem 0 0.45rem;
-                    font-size: 0.88rem;
-                }}
-                .location-summary-table th {{
-                    color: #475569;
-                    font-weight: 600;
-                    padding: 0.25rem 0.55rem;
-                    text-align: left;
-                    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
-                }}
-                .location-summary-table td {{
-                    color: #0f172a;
-                    font-weight: 650;
-                    padding: 0.35rem 0.55rem;
-                    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    with st.container(
+        horizontal=True,
+        vertical_alignment='center',
+        gap='xsmall',
+    ):
+        st.html(
+            f'''<style>
+                .location-summary {{
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.55rem;
+                    min-height: 38px;
+                    padding: 0.3rem 0.65rem;
+                    border: 1px solid rgba(148, 163, 184, 0.45);
+                    border-radius: 0.45rem;
                     background: rgba(248, 250, 252, 0.85);
+                    white-space: nowrap;
+                }}
+                .location-summary-item + .location-summary-item {{
+                    padding-left: 0.55rem;
+                    border-left: 1px solid rgba(148, 163, 184, 0.35);
+                }}
+                .location-summary-label {{
+                    margin-right: 0.22rem;
+                    color: #64748b;
+                    font-size: 0.68rem;
+                    font-weight: 600;
+                }}
+                .location-summary-value {{
+                    color: #0f172a;
+                    font-size: 0.78rem;
+                    font-weight: 650;
+                }}
+                @media (max-width: 640px) {{
+                    .location-summary {{
+                        gap: 0.32rem;
+                        min-height: 34px;
+                        padding: 0.22rem 0.42rem;
+                    }}
+                    .location-summary-item + .location-summary-item {{
+                        padding-left: 0.32rem;
+                    }}
+                    .location-summary-label {{
+                        display: block;
+                        margin: 0;
+                        font-size: 0.56rem;
+                        line-height: 1;
+                    }}
+                    .location-summary-value {{ font-size: 0.67rem; }}
                 }}
             </style>
-            <table class="location-summary-table">
-                <thead>
-                    <tr>
-                        <th>Latitude</th>
-                        <th>Longitude</th>
-                        <th>Elevation</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>{latitude:.4f}</td>
-                        <td>{longitude:.4f}</td>
-                        <td>{elevation_label}</td>
-                    </tr>
-                </tbody>
-            </table>
-            """,
-            unsafe_allow_html=True,
+            <div class="location-summary">
+                <span class="location-summary-item">
+                    <span class="location-summary-label">Lat</span>
+                    <span class="location-summary-value">{latitude:.4f}</span>
+                </span>
+                <span class="location-summary-item">
+                    <span class="location-summary-label">Lon</span>
+                    <span class="location-summary-value">{longitude:.4f}</span>
+                </span>
+                <span class="location-summary-item">
+                    <span class="location-summary-label">Elev</span>
+                    <span class="location-summary-value">{elevation_label}</span>
+                </span>
+            </div>''',
+            width='content',
+        )
+        fetch_forecast = st.button(
+            label='Fetch forecast',
+            help='Fetch weather for the selected map location.',
+            type='primary',
         )
 
-    with action_col:
-        if st.button(
-            label='Fetch Forecast!',
-            help='Click to get the forecast at the latitude-longitude above.',
-            type='primary',
-        ):
-            try:
-                df = fetch_forcast(latitude, longitude)
-                aq = fetch_airquality(latitude, longitude)
-                de = fetch_ensemble(latitude, longitude)
+    if fetch_forecast:
+        try:
+            df = fetch_forcast(latitude, longitude)
+            aq = fetch_airquality(latitude, longitude)
+            de = fetch_ensemble(latitude, longitude)
 
-                f_fig = make_forecast_plot(df, aq)
-                e_fig = make_ensemble_plot(de, df)
+            f_fig = make_forecast_plot(df, aq)
+            e_fig = make_ensemble_plot(de, df)
 
-                st.session_state['df'] = df
-                st.session_state['de'] = de
-                st.session_state['aq'] = aq
-                st.session_state['f_fig'] = f_fig
-                st.session_state['e_fig'] = e_fig
-            except RuntimeError as e:
-                st.error(f"Forecast data could not be fetched: {e}")
+            st.session_state['df'] = df
+            st.session_state['de'] = de
+            st.session_state['aq'] = aq
+            st.session_state['f_fig'] = f_fig
+            st.session_state['e_fig'] = e_fig
+        except RuntimeError as e:
+            st.error(f"Forecast data could not be fetched: {e}")
 
     tabs = ['Forecast', 'Ensemble', 'Historical']
     tab_objs = st.tabs(tabs)
@@ -933,12 +1184,18 @@ def render_point_forecast_tool():
         with tab_obj:
             if tab_name == 'Forecast':
                 if 'f_fig' in st.session_state:
-                    st.plotly_chart(st.session_state['f_fig'], width='stretch')
+                    with st.container(gap=None):
+                        render_daily_forecast_strip(st.session_state['df'])
+                        st.plotly_chart(
+                            st.session_state['f_fig'], width='stretch')
                 else:
                     st.info('Forecast is ready after you click Fetch Forecast!')
             elif tab_name == 'Ensemble':
                 if 'e_fig' in st.session_state:
-                    st.plotly_chart(st.session_state['e_fig'], width='stretch')
+                    with st.container(gap=None):
+                        render_daily_forecast_strip(st.session_state['df'])
+                        st.plotly_chart(
+                            st.session_state['e_fig'], width='stretch')
                 else:
                     st.info('Ensemble is ready after you click Fetch Forecast!')
             elif tab_name == 'Historical':
@@ -1011,6 +1268,9 @@ def render_point_forecast_tool():
 
                 if can_plot_historical and 'h_fig' in st.session_state:
                     st.plotly_chart(st.session_state['h_fig'], width='stretch')
+
+    st.caption(
+        'Map data: OpenStreetMap, SRTM, OpenTopoMap. Radar imagery: Rain Viewer.')
 
 
 def clear_route_results():
