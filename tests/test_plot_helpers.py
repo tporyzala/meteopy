@@ -4,12 +4,67 @@ import unittest
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class PlotHelperTests(unittest.TestCase):
+    def test_value_box_hover_uses_colored_number_labels_across_subplots(self):
+        apply_value_box_hover = self._load_function(
+            "apply_value_box_hover")
+        figure = make_subplots(rows=2, cols=1, shared_xaxes=True)
+        figure.add_trace(go.Scatter(
+            x=["2026-09-07 13:00"], y=[79], name="Temperature"),
+            row=1, col=1)
+        figure.add_trace(go.Scatter(
+            x=["2026-09-07 13:00"], y=[67], name="Dewpoint"),
+            row=2, col=1)
+
+        apply_value_box_hover(figure)
+
+        self.assertEqual("x", figure.layout.hovermode)
+        self.assertEqual("axis", figure.layout.hoversubplots)
+        self.assertEqual(-1, figure.layout.spikedistance)
+        self.assertEqual(
+            "rgba(0,0,0,0)", figure.layout.hoverlabel.bgcolor)
+        self.assertEqual(
+            "rgba(0,0,0,0)", figure.layout.hoverlabel.bordercolor)
+        self.assertEqual(
+            "rgba(0,0,0,0)", figure.layout.hoverlabel.font.color)
+        self.assertFalse(figure.layout.hoverlabel.showarrow)
+        for axis in (figure.layout.xaxis, figure.layout.xaxis2):
+            self.assertTrue(axis.showspikes)
+            self.assertEqual("across", axis.spikemode)
+        self.assertEqual(
+            "%{y:.2~f}<extra></extra>", figure.data[0].hovertemplate)
+        self.assertEqual("#b91c1c", figure.data[0].hoverlabel.bgcolor)
+        self.assertEqual("#4d7c0f", figure.data[1].hoverlabel.bgcolor)
+
+    def test_hover_time_label_shows_short_weekday_and_is_not_duplicated(self):
+        add_hover_time_label = self._load_function(
+            "add_hover_time_label", {"go": go})
+        figure = make_subplots(rows=2, cols=1, shared_xaxes=True)
+
+        add_hover_time_label(
+            figure,
+            ["2026-09-07 12:00", "2026-09-07 13:00"],
+            [77, 82, 65, 67],
+        )
+        add_hover_time_label(
+            figure,
+            ["2026-09-07 12:00", "2026-09-07 13:00"],
+            [77, 82, 65, 67],
+        )
+
+        self.assertEqual(1, len(figure.data))
+        time_trace = figure.data[0]
+        self.assertEqual("forecast-hover-time", time_trace.meta)
+        self.assertIn("%a", time_trace.hovertemplate)
+        self.assertIn("%-I%p", time_trace.hovertemplate)
+
     def test_daily_weather_card_is_a_continuous_html_fragment(self):
         daily_weather_card_html = self._load_function(
             "daily_weather_card_html")
@@ -121,7 +176,7 @@ class PlotHelperTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _load_function(name):
+    def _load_function(name, extra_namespace=None):
         tree = ast.parse((ROOT / "main.py").read_text())
         function_node = next(
             node for node in tree.body
@@ -130,6 +185,8 @@ class PlotHelperTests(unittest.TestCase):
         module = ast.Module(body=[function_node], type_ignores=[])
         ast.fix_missing_locations(module)
         namespace = {"pd": pd, "np": np}
+        if extra_namespace:
+            namespace.update(extra_namespace)
         exec(compile(module, "main.py", "exec"), namespace)
         return namespace[name]
 

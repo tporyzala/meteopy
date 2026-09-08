@@ -402,6 +402,130 @@ def render_daily_forecast_strip(forecast):
     )
 
 
+def apply_value_box_hover(figure):
+    hover_colors = {
+        'Temperature': '#b91c1c',
+        'Feels like': '#be4b9e',
+        'Dewpoint': '#4d7c0f',
+        'Humidity': '#1d4ed8',
+        'Precip. %': '#0284c7',
+        'Cloud Cover': '#64748b',
+        'Pressure': '#1f2937',
+        'Rain': '#0284c7',
+        'Shower': '#0ea5e9',
+        'Snow': '#64748b',
+        'Wind Speed': '#2563eb',
+        'Wind Gusts': '#ea580c',
+        'PM2.5': '#991b1b',
+        'PM10': '#c2410c',
+        'AQI': '#7e22ce',
+    }
+    fallback_colors = [
+        '#2563eb', '#64748b', '#0284c7',
+        '#4d7c0f', '#ea580c', '#1f2937',
+    ]
+
+    figure.update_layout(
+        hovermode='x',
+        hoversubplots='axis',
+        hoverdistance=60,
+        spikedistance=-1,
+        hoverlabel=dict(
+            # Hide Plotly's duplicate x-axis hover callout. Each visible
+            # value badge supplies its own colors below.
+            bgcolor='rgba(0,0,0,0)',
+            bordercolor='rgba(0,0,0,0)',
+            font=dict(color='rgba(0,0,0,0)', size=11),
+            namelength=0,
+            showarrow=False,
+        ),
+    )
+    figure.update_xaxes(
+        showspikes=True,
+        spikecolor='#64748b',
+        spikedash='dot',
+        spikethickness=1,
+        spikesnap='cursor',
+        spikemode='across',
+    )
+
+    for index, trace in enumerate(figure.data):
+        if getattr(trace, 'meta', None) == 'forecast-hover-time':
+            continue
+        color = hover_colors.get(
+            trace.name, fallback_colors[index % len(fallback_colors)])
+        trace.update(
+            hovertemplate='%{y:.2~f}<extra></extra>',
+            hoverlabel=dict(
+                bgcolor=color,
+                bordercolor=color,
+                font=dict(color='white', size=11),
+                namelength=0,
+                showarrow=True,
+            ),
+        )
+    return figure
+
+
+def add_hover_time_label(figure, times, values):
+    if any(
+        getattr(trace, 'meta', None) == 'forecast-hover-time'
+        for trace in figure.data
+    ):
+        return figure
+
+    numeric_values = pd.to_numeric(
+        pd.Series(values), errors='coerce').dropna()
+    if numeric_values.empty:
+        return figure
+
+    minimum = numeric_values.min()
+    maximum = numeric_values.max()
+    padding = max((maximum - minimum) * 0.03, 0.5)
+    hover_y = maximum + padding
+    times = list(times)
+    figure.add_trace(
+        go.Scatter(
+            x=times,
+            y=[hover_y] * len(times),
+            mode='markers',
+            marker=dict(size=1, color='rgba(15,23,42,0.01)'),
+            meta='forecast-hover-time',
+            name='Hover time',
+            showlegend=False,
+            cliponaxis=False,
+            hovertemplate=(
+                '<b>%{x|%-I%p}</b><br>'
+                '%{x|%a %m/%d}'
+                '<extra></extra>'
+            ),
+            hoverlabel=dict(
+                bgcolor='rgba(255,255,255,0.96)',
+                bordercolor='rgba(255,255,255,0)',
+                font=dict(color='#0f172a', size=10),
+                showarrow=False,
+            ),
+        ),
+        row=1,
+        col=1,
+    )
+    return figure
+
+
+def configure_forecast_hover(figure, hourly, temperature_columns):
+    apply_value_box_hover(figure)
+    available_columns = [
+        column for column in temperature_columns if column in hourly.columns]
+    if available_columns:
+        temperature_values = pd.concat(
+            [hourly[column] for column in available_columns],
+            ignore_index=True,
+        )
+        add_hover_time_label(
+            figure, hourly['time'], temperature_values)
+    return figure
+
+
 def make_forecast_plot(df, aq=None):
     # Subplots (forecast)
 
@@ -560,10 +684,6 @@ def make_forecast_plot(df, aq=None):
                 ss = row['sunset']
 
     layout = {
-        'hovermode': 'x',
-        'hoverlabel': dict(
-            bgcolor='rgba(255,255,255,0.5)',
-        ),
         'legend_tracegroupgap': 90,
         'height': 1300,
         'barmode': 'stack',
@@ -656,6 +776,11 @@ def make_forecast_plot(df, aq=None):
         ),
     }
     f_fig.update_layout(**layout)
+    configure_forecast_hover(
+        f_fig,
+        df_hourly,
+        ['temperature_2m', 'apparent_temperature', 'dew_point_2m'],
+    )
     plot_range = daily_forecast_range(df_daily)
     if plot_range is not None:
         f_fig.update_xaxes(range=plot_range)
@@ -786,10 +911,6 @@ def make_ensemble_plot(de, df):
             ss = row['sunset']
 
     layout = {
-        'hovermode': 'x',
-        'hoverlabel': dict(
-            bgcolor='rgba(255,255,255,0.5)',
-        ),
         'legend_tracegroupgap': 90,
         'height': 1300,
         'barmode': 'stack',
@@ -890,6 +1011,14 @@ def make_ensemble_plot(de, df):
         ),
     }
     e_fig.update_layout(**layout)
+    configure_forecast_hover(
+        e_fig,
+        de_hourly,
+        [
+            column for column in de_hourly.columns
+            if column.startswith('apparent_temperature_')
+        ],
+    )
     plot_range = daily_forecast_range(df_daily)
     if plot_range is not None:
         e_fig.update_xaxes(range=plot_range)
@@ -1187,7 +1316,17 @@ def render_point_forecast_tool():
                     with st.container(gap=None):
                         render_daily_forecast_strip(st.session_state['df'])
                         st.plotly_chart(
-                            st.session_state['f_fig'], width='stretch')
+                            configure_forecast_hover(
+                                st.session_state['f_fig'],
+                                st.session_state['df']['hourly'],
+                                [
+                                    'temperature_2m',
+                                    'apparent_temperature',
+                                    'dew_point_2m',
+                                ],
+                            ),
+                            width='stretch',
+                        )
                 else:
                     st.info('Forecast is ready after you click Fetch Forecast!')
             elif tab_name == 'Ensemble':
@@ -1195,7 +1334,18 @@ def render_point_forecast_tool():
                     with st.container(gap=None):
                         render_daily_forecast_strip(st.session_state['df'])
                         st.plotly_chart(
-                            st.session_state['e_fig'], width='stretch')
+                            configure_forecast_hover(
+                                st.session_state['e_fig'],
+                                st.session_state['de']['hourly'],
+                                [
+                                    column
+                                    for column in st.session_state['de']['hourly'].columns
+                                    if column.startswith(
+                                        'apparent_temperature_')
+                                ],
+                            ),
+                            width='stretch',
+                        )
                 else:
                     st.info('Ensemble is ready after you click Fetch Forecast!')
             elif tab_name == 'Historical':
